@@ -43,3 +43,7 @@ resources/icon.iconset/
 *.traineddata
 /tmp/glint-bundle.log
 .diag/
+
+# Claude Code local tooling state — TDD-guard data, scheduled-tasks lock,
+# per-machine plugin caches. Not portable, not source.
+.claude/
