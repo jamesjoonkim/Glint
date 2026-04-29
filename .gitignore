@@ -39,3 +39,4 @@ test-results/
 # env
 .env
 .env.local
+resources/icon.iconset/

@@ -10,16 +10,19 @@
     "npm": ">=10"
   },
   "scripts": {
-    "dev": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
+    "dev": "npm run rebuild:electron && electron-forge start",
+    "package": "npm run rebuild:electron && electron-forge package",
+    "make": "npm run rebuild:electron && electron-forge make",
+    "publish": "npm run rebuild:electron && electron-forge publish",
+    "rebuild:electron": "electron-rebuild --force --build-from-source --module-dir node_modules/better-sqlite3",
+    "rebuild:node": "npm rebuild better-sqlite3",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --ext .ts,.tsx ./src",
-    "test": "vitest run",
+    "test": "npm run rebuild:node && vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test"
+    "test:coverage": "npm run rebuild:node && vitest run --coverage",
+    "test:e2e": "npm run rebuild:electron && playwright test",
+    "icon": "node build/gen-icon.mjs"
   },
   "glint": {
     "models": {

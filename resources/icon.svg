@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a2236"/>
+      <stop offset="55%" stop-color="#0f1626"/>
+      <stop offset="100%" stop-color="#070b14"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.72" cy="0.28" r="0.6">
+      <stop offset="0%"  stop-color="rgba(245,185,69,0.55)"/>
+      <stop offset="50%" stop-color="rgba(245,185,69,0.12)"/>
+      <stop offset="100%" stop-color="rgba(245,185,69,0)"/>
+    </radialGradient>
+    <linearGradient id="bracket" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#f0f4fb"/>
+      <stop offset="100%" stop-color="#a4adc0"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#fde08a"/>
+      <stop offset="55%"  stop-color="#f5b945"/>
+      <stop offset="100%" stop-color="#c98718"/>
+    </linearGradient>
+    <filter id="sparkglow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- macOS-style squircle background with depth -->
+  <rect x="32" y="32" width="960" height="960" rx="232" ry="232" fill="url(#bg)"/>
+  <rect x="32" y="32" width="960" height="960" rx="232" ry="232" fill="url(#glow)"/>
+
+  <!-- Inner bevel hairline -->
+  <rect x="34" y="34" width="956" height="956" rx="230" ry="230"
+        fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="1"/>
+
+  <!-- Marquee-corner brackets (the screenshot capture metaphor) -->
+  <g stroke="url(#bracket)" stroke-width="56" stroke-linecap="round" fill="none" opacity="0.95">
+    <!-- top-left -->
+    <path d="M 286 396 L 286 286 L 396 286"/>
+    <!-- bottom-right -->
+    <path d="M 628 738 L 738 738 L 738 628"/>
+  </g>
+
+  <!-- Center 8-point sparkle: the glint of insight -->
+  <g transform="translate(512 512)" filter="url(#sparkglow)">
+    <!-- 4-point primary -->
+    <path d="M 0 -150 L 28 -28 L 150 0 L 28 28 L 0 150 L -28 28 L -150 0 L -28 -28 Z"
+          fill="url(#spark)"/>
+    <!-- 4-point secondary at 45° -->
+    <path d="M 0 -90 L 16 -16 L 90 0 L 16 16 L 0 90 L -16 16 L -90 0 L -16 -16 Z"
+          fill="#ffffff" opacity="0.9" transform="rotate(45)"/>
+    <!-- bright core -->
+    <circle r="14" fill="#ffffff"/>
+  </g>
+</svg>
