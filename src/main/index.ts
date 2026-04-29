@@ -111,6 +111,10 @@ function wireIpc(): void {
     try {
       const record = await captureBBox(bbox);
       log.info({ id: record.id }, 'capture complete');
+      // Defensive: if anything kept the overlay alive across the screenshot
+      // (HMR stale handler, alwaysOnTop stickiness), tear it down again now
+      // that the capture is in hand. Idempotent — no-op if already gone.
+      closeOverlay();
       const streamId = startStream();
       // Wait for BOTH runtime spawns before dispatching — the router doesn't
       // know yet whether this capture goes text or vision. First-launch
@@ -123,6 +127,7 @@ function wireIpc(): void {
       return { ok: true, id: record.id, streamId };
     } catch (err) {
       log.error({ err: String(err) }, 'capture failed');
+      closeOverlay(); // even on failure — never leave the marquee on screen
       return { ok: false, error: String(err) };
     }
   });

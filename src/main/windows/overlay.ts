@@ -63,6 +63,23 @@ export function openOverlay(): BrowserWindow {
   return overlay;
 }
 
+/**
+ * Tear the overlay down hard. We use destroy() instead of close() so
+ * nothing — Vite HMR-stale event handlers, alwaysOnTop stickiness, OS
+ * focus quirks — can keep the window visible. Also hide() first so the
+ * visual disappearance is immediate even before destruction completes.
+ */
 export function closeOverlay(): void {
-  if (overlay && !overlay.isDestroyed()) overlay.close();
+  if (!overlay) return;
+  if (overlay.isDestroyed()) {
+    overlay = null;
+    return;
+  }
+  try {
+    overlay.hide();
+  } catch {
+    // ignore — happens if the window is mid-teardown already
+  }
+  overlay.destroy();
+  overlay = null;
 }
