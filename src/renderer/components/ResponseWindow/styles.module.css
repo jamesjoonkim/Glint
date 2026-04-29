@@ -581,6 +581,17 @@
   gap: 6px;
   padding: 6px 6px 0;
 }
+.replyError {
+  margin: 4px 6px 0;
+  padding: 6px 10px;
+  border: 1px solid rgba(239, 107, 107, 0.4);
+  background: rgba(239, 107, 107, 0.08);
+  color: #ef9b9b;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-family: 'SF Mono', Menlo, monospace;
+  cursor: pointer;
+}
 .attachmentChip {
   position: relative;
   width: 56px;

@@ -38,6 +38,7 @@ export function ChatReply({
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -72,35 +73,53 @@ export function ChatReply({
 
   const submit = async () => {
     const trimmed = value.trim();
-    if (disabled || sending) return;
+    if (sending) return;
     if (!trimmed && attachments.length === 0) return;
-    if (!threadId && attachments.length > 0) return;
+    if (!threadId) {
+      // Surface this loudly — silent no-op was the bug we just hit.
+      console.warn('submit blocked: no threadId yet');
+      setError('Chat not ready yet — try again in a moment.');
+      return;
+    }
+    if (disabled && attachments.length === 0) {
+      // Disabled flag with no attachments queued is the "wait for reply"
+      // case — handled by the Enter no-op above. Mouse-click submit fell
+      // through to here in some races; keep the silent return for that.
+      return;
+    }
 
-    // Snapshot then clear so the user can keep typing while the request
-    // flies.
     const text = trimmed;
     const queued = attachments;
     setValue('');
     setAttachments([]);
+    setError(null);
 
     if (queued.length === 0) {
-      // Text-only path stays on the existing continueThread flow.
       onSend(text);
       return;
     }
 
     setSending(true);
     try {
-      // Multi-image + text → one composed turn. Main saves each image as
-      // a capture row, builds a single multimodal vision message with
-      // [text, ...image_url(N)], streams ONE assistant response.
-      await window.glint?.invoke?.('chat:sendComposed', {
+      const res = (await window.glint?.invoke?.('chat:sendComposed', {
         threadId,
         attachments: queued.map((a) => ({ dataUrl: a.dataUrl })),
         text,
-      });
+      })) as { ok?: boolean; error?: string } | undefined;
+      if (res && res.ok === false) {
+        throw new Error(res.error ?? 'send failed');
+      }
     } catch (err) {
       console.error('chat:sendComposed failed', err);
+      // Restore the attachments + text so the user can retry without
+      // losing their work.
+      setAttachments(queued);
+      setValue(text);
+      setError(
+        String(err).includes('No handler registered')
+          ? 'Main process is out of date — restart dev (rs).'
+          : `Send failed: ${String(err).slice(0, 120)}`,
+      );
     } finally {
       setSending(false);
     }
@@ -175,6 +194,15 @@ export function ChatReply({
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {error && (
+        <div
+          className={styles.replyError}
+          role="alert"
+          onClick={() => setError(null)}
+        >
+          {error}
+        </div>
+      )}
       {attachments.length > 0 && (
         <div className={styles.attachmentRow}>
           {attachments.map((att) => (
