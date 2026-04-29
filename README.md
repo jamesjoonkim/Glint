@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="resources/icon.svg" alt="Glint" width="120" height="120" />
+<img src="resources/screenshots/hero.svg" alt="Glint — local-first AI screenshot assistant" width="100%" />
 
-# Glint
+<br />
 
 **Local-first AI screenshot assistant for Apple Silicon.**
 
