@@ -60,6 +60,21 @@ export function startStream(): string {
 }
 
 /**
+ * Active AbortControllers, keyed by streamId. The IPC handler for
+ * stream:cancel looks up the controller and calls abort(). pipeline
+ * code path is the only writer; both runPipeline and continueThread
+ * register on entry and clean up in the finally block.
+ */
+const activeControllers = new Map<string, AbortController>();
+
+export function cancelStream(streamId: string): boolean {
+  const controller = activeControllers.get(streamId);
+  if (!controller) return false;
+  controller.abort();
+  return true;
+}
+
+/**
  * Continue an existing thread with a new user message. Streams the
  * assistant's reply back to the response window via the same IPC events
  * the initial answer uses, persists both turns to history.
@@ -76,6 +91,9 @@ export async function continueThread(
   const streamId = randomUUID();
   send('response:set-stream', { streamId });
 
+  const controller = new AbortController();
+  activeControllers.set(streamId, controller);
+
   try {
     appendTurn(threadId, 'user', userMessage);
   } catch (err) {
@@ -91,9 +109,6 @@ export async function continueThread(
   try {
     const turns = getTurns(threadId);
     const capture = findCapturesForThread(threadId);
-    // Vision-route follow-ups need the actual image, not just OCR. Per Qwen3-VL
-    // guidance the image goes on the FIRST user turn only — the model retains
-    // visual context through the conversation history without re-attachment.
     const useVision =
       capture?.route === 'vision' &&
       !!deps.visionUrl &&
@@ -103,16 +118,23 @@ export async function continueThread(
       ? await buildVisionFollowupRequest(capture!, turns, deps)
       : await buildTextFollowupRequest(capture, turns, deps);
 
-    const stream = streamCompletion(cfg, { model, messages });
+    const stream = streamCompletion(cfg, { model, messages }, controller.signal);
     for await (const tok of stream) onTok(tok);
 
-    // Persist the assistant turn BEFORE notifying done — see runPipeline for
-    // the race-condition rationale.
-    appendTurn(threadId, 'assistant', answer, useVision ? deps.visionModel : deps.textModel);
+    // Append whatever we got — even partial answers from a cancelled stream
+    // belong in history. Tag with `[stopped]` suffix when interrupted so the
+    // user can see at a glance which turns are full vs cut short.
+    const aborted = controller.signal.aborted;
+    const final = aborted && answer ? `${answer}\n\n_[stopped]_` : answer;
+    if (final) {
+      appendTurn(threadId, 'assistant', final, useVision ? deps.visionModel : deps.textModel);
+    }
     send('model:stream:done', { id: streamId });
   } catch (err) {
     log.error({ err: String(err), threadId }, 'continue thread failed');
     send('model:stream:error', { id: streamId, error: String(err) });
+  } finally {
+    activeControllers.delete(streamId);
   }
 }
 
@@ -193,6 +215,9 @@ export async function runPipeline(
     win()?.webContents.send(channel, payload);
   };
 
+  const controller = new AbortController();
+  activeControllers.set(streamId, controller);
+
   try {
     const ocr = await runOcr(capture.pngPath);
     const wPx = capture.bbox.width;
@@ -242,22 +267,24 @@ export async function runPipeline(
     // their screenshot explained.
     const canVision = !!deps.visionUrl || process.env.GLINT_LLM === 'fake';
     if (decision.route === 'vision' && canVision) {
-      await runVisionRoute(capture, streamId, deps, onTok);
+      await runVisionRoute(capture, streamId, deps, onTok, controller.signal);
     } else {
       if (decision.route === 'vision') {
         log.info({ id: capture.id }, 'vision unavailable — falling through to text route');
       }
-      await runTextRoute(capture, ocr, streamId, deps, onTok);
+      await runTextRoute(capture, ocr, streamId, deps, onTok, controller.signal);
     }
 
-    // Persist the assistant turn BEFORE notifying done — the renderer reacts
-    // to done by refetching turns, and we don't want that fetch to race the
-    // DB write. better-sqlite3 is synchronous so this is microseconds.
+    // Persist the assistant turn BEFORE notifying done.
     if (dbCaptureId && dbThreadId) {
-      try {
-        appendTurn(dbThreadId, 'assistant', answer, deps.textModel);
-      } catch (err) {
-        log.warn({ err: String(err) }, 'append assistant turn failed');
+      const aborted = controller.signal.aborted;
+      const final = aborted && answer ? `${answer}\n\n_[stopped]_` : answer;
+      if (final) {
+        try {
+          appendTurn(dbThreadId, 'assistant', final, deps.textModel);
+        } catch (err) {
+          log.warn({ err: String(err) }, 'append assistant turn failed');
+        }
       }
     }
     send('model:stream:done', { id: streamId });
@@ -276,6 +303,8 @@ export async function runPipeline(
   } catch (err) {
     log.error({ err: String(err), id: capture.id }, 'pipeline failed');
     send('model:stream:error', { id: streamId, error: String(err) });
+  } finally {
+    activeControllers.delete(streamId);
   }
 }
 
@@ -317,12 +346,11 @@ async function runTextRoute(
   _streamId: string,
   deps: PipelineDeps,
   onTok: (chunk: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   const systemPrompt = await loadPrompt('answer-text');
   const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
 
-  // For low-confidence OCR (vision-route fallback), tell the model what we
-  // know about the capture so it can explain context the text alone misses.
   const lowConfidence = ocr.confidence < 50 || ocr.charCount < 20;
   const userMessage = lowConfidence
     ? `The user captured a region of their screen (${capture.bbox.width}×${capture.bbox.height}px). OCR was uncertain (${ocr.charCount} chars, conf ${ocr.confidence.toFixed(0)}). Best-effort extracted text follows — explain what the screenshot is likely about, including any visible UI elements or structure suggested by the text.\n\n---\n${ocr.text || '(no text recognized)'}`
@@ -334,7 +362,7 @@ async function runTextRoute(
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
-  });
+  }, signal);
   for await (const tok of stream) onTok(tok);
 }
 
@@ -343,6 +371,7 @@ async function runVisionRoute(
   _streamId: string,
   deps: PipelineDeps,
   onTok: (chunk: string) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!deps.visionUrl && process.env.GLINT_LLM !== 'fake') {
     onTok(
@@ -361,7 +390,7 @@ async function runVisionRoute(
   const stream = streamCompletion(cfg, {
     model: deps.visionModel,
     messages: [{ role: 'system', content: systemPrompt }, userMsg],
-  });
+  }, signal);
   for await (const tok of stream) onTok(tok);
 }
 

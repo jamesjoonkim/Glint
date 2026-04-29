@@ -37,6 +37,10 @@ const FAKE = process.env.GLINT_LLM === 'fake';
 export async function* streamCompletion(
   cfg: ClientConfig,
   req: CompletionRequest,
+  /** Abort the SSE read mid-stream when this signal fires. The HTTP fetch
+   *  is also tied to it, so the request to mlx_lm.server is closed cleanly
+   *  rather than left hanging on the server side. */
+  signal?: AbortSignal,
 ): AsyncIterable<string> {
   if (FAKE || cfg.fakeResponsesDir) {
     yield* fakeStream(cfg.fakeResponsesDir);
@@ -47,6 +51,7 @@ export async function* streamCompletion(
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...req, stream: true }),
+    signal,
   });
   if (!res.ok || !res.body) {
     throw new Error(`mlx server returned ${res.status} ${res.statusText}`);
@@ -55,20 +60,35 @@ export async function* streamCompletion(
   const decoder = new TextDecoder();
   const reader = res.body.getReader();
   let buf = '';
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
+  try {
+    while (true) {
+      if (signal?.aborted) {
+        try {
+          await reader.cancel();
+        } catch {
+          // ignore — already closed
+        }
+        return;
+      }
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
 
-    let nl = buf.indexOf('\n');
-    while (nl >= 0) {
-      const line = buf.slice(0, nl).trim();
-      buf = buf.slice(nl + 1);
-      nl = buf.indexOf('\n');
-      const tok = parseSseLine(line);
-      if (tok === '[DONE]') return;
-      if (tok) yield tok;
+      let nl = buf.indexOf('\n');
+      while (nl >= 0) {
+        const line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        nl = buf.indexOf('\n');
+        const tok = parseSseLine(line);
+        if (tok === '[DONE]') return;
+        if (tok) yield tok;
+      }
     }
+  } catch (err) {
+    // AbortError surfaces from fetch when the signal aborts during read.
+    // Treat as clean stream end — caller can inspect signal.aborted.
+    if (signal?.aborted) return;
+    throw err;
   }
 }
 

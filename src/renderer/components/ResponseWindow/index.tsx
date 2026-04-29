@@ -124,9 +124,20 @@ export function ResponseWindow(): JSX.Element {
     refreshTurns(threadId);
   }, [stream.done, stream.text, streamId, threadId]);
 
-  // Auto-scroll to bottom on new tokens.
+  // Sticky-bottom auto-scroll: follow new tokens ONLY when the user is
+  // already near the bottom. If they've scrolled up to read history, leave
+  // them alone — yanking them back to the bottom on every token mid-read
+  // is the worst chat-app feeling.
   useEffect(() => {
-    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
+    const body = bodyRef.current;
+    if (!body) return;
+    const distanceFromBottom = body.scrollHeight - body.scrollTop - body.clientHeight;
+    // 80px threshold: forgiving enough that small over-scroll bounces don't
+    // detach you from "follow mode," tight enough that scrolling up by even
+    // one or two lines stops the auto-follow.
+    if (distanceFromBottom < 80) {
+      body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' });
+    }
   }, [stream.text, turns.length]);
 
   const status = stream.error
@@ -171,7 +182,17 @@ export function ResponseWindow(): JSX.Element {
         )}
       </main>
       <footer className={styles.footer}>
-        <ChatReply disabled={replyDisabled} threadId={threadId} onSend={handleReply} />
+        <ChatReply
+          disabled={replyDisabled}
+          threadId={threadId}
+          streaming={streamId !== null && !stream.done}
+          onSend={handleReply}
+          onCancel={() => {
+            if (streamId) {
+              void window.glint?.invoke?.('model:stream:cancel', { streamId });
+            }
+          }}
+        />
       </footer>
     </div>
   );

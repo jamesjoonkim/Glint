@@ -4,7 +4,15 @@ import styles from './styles.module.css';
 type Props = {
   disabled: boolean;
   threadId: string | null;
+  streaming: boolean;
   onSend: (text: string) => void;
+  onCancel: () => void;
+};
+
+type Attachment = {
+  id: string;
+  dataUrl: string;
+  name: string;
 };
 
 function readFileAsDataURL(file: File): Promise<string> {
@@ -16,13 +24,22 @@ function readFileAsDataURL(file: File): Promise<string> {
   });
 }
 
-export function ChatReply({ disabled, threadId, onSend }: Props): JSX.Element {
+let attachmentCounter = 0;
+const nextAttachmentId = () => `att-${Date.now()}-${++attachmentCounter}`;
+
+export function ChatReply({
+  disabled,
+  threadId,
+  streaming,
+  onSend,
+  onCancel,
+}: Props): JSX.Element {
   const [value, setValue] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [attaching, setAttaching] = useState(false);
+  const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-grow: reset to 0 then read scrollHeight, clamp to CSS max-height.
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -30,11 +47,64 @@ export function ChatReply({ disabled, threadId, onSend }: Props): JSX.Element {
     ta.style.height = `${ta.scrollHeight}px`;
   }, [value]);
 
-  const submit = () => {
+  // Focus the input when the response window mounts so ⌘⇧Z chats land
+  // ready-to-type without an extra click.
+  useEffect(() => {
+    textareaRef.current?.focus();
+  }, []);
+
+  const stageFile = async (file: File): Promise<void> => {
+    if (!file.type.startsWith('image/')) return;
+    try {
+      const dataUrl = await readFileAsDataURL(file);
+      setAttachments((prev) => [
+        ...prev,
+        { id: nextAttachmentId(), dataUrl, name: file.name || 'image' },
+      ]);
+    } catch (err) {
+      console.error('attachment read failed', err);
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const submit = async () => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
+    if (disabled || sending) return;
+    if (!trimmed && attachments.length === 0) return;
+    if (!threadId && attachments.length > 0) return;
+
+    // Snapshot current state, clear UI immediately so the user can keep
+    // typing while images upload.
+    const text = trimmed;
+    const queued = attachments;
     setValue('');
+    setAttachments([]);
+
+    if (queued.length === 0) {
+      onSend(text);
+      return;
+    }
+
+    setSending(true);
+    try {
+      // Fire each attached image through the pipeline in sequence. Each
+      // becomes its own capture row in the thread. Multi-image-as-single-
+      // turn (one combined assistant response) is a future enhancement.
+      for (const att of queued) {
+        await window.glint?.invoke?.('capture:attachImage', {
+          threadId,
+          dataUrl: att.dataUrl,
+        });
+      }
+      if (text) onSend(text);
+    } catch (err) {
+      console.error('capture:attachImage failed', err);
+    } finally {
+      setSending(false);
+    }
   };
 
   const onAttachCapture = () => {
@@ -44,35 +114,22 @@ export function ChatReply({ disabled, threadId, onSend }: Props): JSX.Element {
       .catch((err) => console.error('capture:openForThread failed', err));
   };
 
-  const attachFile = async (file: File): Promise<void> => {
-    if (!threadId) return;
-    if (!file.type.startsWith('image/')) return;
-    setAttaching(true);
-    try {
-      const dataUrl = await readFileAsDataURL(file);
-      await window.glint?.invoke?.('capture:attachImage', { threadId, dataUrl });
-    } catch (err) {
-      console.error('capture:attachImage failed', err);
-    } finally {
-      setAttaching(false);
-    }
-  };
-
   const onPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (!threadId) return;
     const items = e.clipboardData?.items;
     if (!items) return;
+    let staged = false;
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile();
         if (!file) continue;
-        // Block the default paste so the data-URL doesn't dump as text into
-        // the textarea.
-        e.preventDefault();
-        void attachFile(file);
-        return;
+        staged = true;
+        void stageFile(file);
       }
     }
+    // Only suppress the default paste if we actually intercepted an image —
+    // otherwise plain-text paste should pass through.
+    if (staged) e.preventDefault();
   };
 
   const onDragOver = (e: React.DragEvent<HTMLFormElement>) => {
@@ -83,8 +140,6 @@ export function ChatReply({ disabled, threadId, onSend }: Props): JSX.Element {
   };
 
   const onDragLeave = (e: React.DragEvent<HTMLFormElement>) => {
-    // Only clear when leaving the form entirely, not when crossing into a
-    // child element (which fires dragleave on the parent).
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     setDragging(false);
   };
@@ -93,15 +148,15 @@ export function ChatReply({ disabled, threadId, onSend }: Props): JSX.Element {
     e.preventDefault();
     setDragging(false);
     if (!threadId) return;
-    const file = Array.from(e.dataTransfer?.files ?? []).find((f) =>
-      f.type.startsWith('image/'),
-    );
-    if (!file) return;
-    void attachFile(file);
+    for (const file of Array.from(e.dataTransfer?.files ?? [])) {
+      if (file.type.startsWith('image/')) void stageFile(file);
+    }
   };
 
-  const placeholder = attaching
-    ? 'attaching image…'
+  const hasContent = value.trim().length > 0 || attachments.length > 0;
+  const sendDisabled = disabled || sending || !hasContent;
+  const placeholder = sending
+    ? 'sending…'
     : dragging
       ? 'drop image to attach'
       : disabled
@@ -115,62 +170,103 @@ export function ChatReply({ disabled, threadId, onSend }: Props): JSX.Element {
       data-dragging={dragging || undefined}
       onSubmit={(e) => {
         e.preventDefault();
-        submit();
+        void submit();
       }}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
-      <button
-        type="button"
-        className={styles.replyAttach}
-        onClick={onAttachCapture}
-        disabled={!threadId || attaching}
-        aria-label="capture screenshot into this chat"
-        title="Capture screenshot into this chat"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path
-            d="M12 5 V19 M5 12 H19"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          />
-        </svg>
-      </button>
-      <textarea
-        ref={textareaRef}
-        rows={1}
-        className={styles.replyInput}
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        onPaste={onPaste}
-        disabled={disabled}
-        aria-label="reply input"
-      />
-      <button
-        type="submit"
-        className={styles.replySend}
-        disabled={disabled || !value.trim()}
-        aria-label="send reply"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path
-            d="M4 12 L20 12 M14 6 L20 12 L14 18"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+      {attachments.length > 0 && (
+        <div className={styles.attachmentRow}>
+          {attachments.map((att) => (
+            <div key={att.id} className={styles.attachmentChip}>
+              <img className={styles.attachmentImage} src={att.dataUrl} alt={att.name} />
+              <button
+                type="button"
+                className={styles.attachmentRemove}
+                onClick={() => removeAttachment(att.id)}
+                aria-label={`remove ${att.name}`}
+                title="Remove"
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M5 5 L19 19 M19 5 L5 19"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className={styles.replyInputRow}>
+        <button
+          type="button"
+          className={styles.replyAttach}
+          onClick={onAttachCapture}
+          disabled={!threadId || sending}
+          aria-label="capture screenshot into this chat"
+          title="Capture screenshot into this chat"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M12 5 V19 M5 12 H19"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <textarea
+          ref={textareaRef}
+          rows={1}
+          className={styles.replyInput}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              void submit();
+            }
+          }}
+          onPaste={onPaste}
+          disabled={disabled || sending}
+          aria-label="reply input"
+        />
+        {streaming ? (
+          <button
+            type="button"
+            className={styles.replyStop}
+            onClick={onCancel}
+            aria-label="stop generating"
+            title="Stop generating"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className={styles.replySend}
+            disabled={sendDisabled}
+            aria-label="send reply"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M4 12 L20 12 M14 6 L20 12 L14 18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        )}
+      </div>
     </form>
   );
 }

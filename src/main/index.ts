@@ -31,7 +31,7 @@ import { hideResponseWindow, onResponseClosed, openResponse } from './windows/re
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
-import { continueThread, runPipeline, startStream, type PipelineDeps } from './pipeline.js';
+import { cancelStream, continueThread, runPipeline, startStream, type PipelineDeps } from './pipeline.js';
 import { destroyWorker } from '../core/ocr/tesseract.js';
 import { startRuntime, type RuntimeHandle } from '../core/models/runtime.js';
 import {
@@ -113,6 +113,13 @@ function showMainWindow(): void {
 
 function wireIpc(): void {
   ipcMain.handle('ping', () => 'pong' as const);
+
+  ipcMain.handle('model:stream:cancel', (_e, payload: unknown) => {
+    const streamId = (payload as { streamId?: unknown })?.streamId;
+    if (typeof streamId !== 'string') return { ok: false, error: 'invalid streamId' };
+    const aborted = cancelStream(streamId);
+    return { ok: aborted, streamId };
+  });
 
   ipcMain.handle('capture:cancel', () => {
     closeOverlay();

@@ -16,6 +16,7 @@ export const IPC = {
     port: 'model:port',
     health: 'model:health',
     stream: 'model:stream',
+    streamCancel: 'model:stream:cancel',
   },
   // history (P3+)
   history: {
