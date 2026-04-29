@@ -1,13 +1,9 @@
 """
-Entry point bundled by PyInstaller. Dispatches to mlx_lm.server (text models)
-or mlx_vlm.server (vision models) based on a leading --backend flag.
+PyInstaller entry point. Dispatches to the appropriate backend:
+  --backend text   → mlx_lm.server (built-in OpenAI-compat HTTP)
+  --backend vision → vlm_server (custom shim over mlx_vlm.generate)
 
-Usage (called by Glint's main process):
-  glint-mlx-server --backend text   --model <path> --host 127.0.0.1 --port 8765
-  glint-mlx-server --backend vision --model <path> --host 127.0.0.1 --port 8766
-
-Adds a localhost-only safety check: refuses to bind anything other than
-127.0.0.1 / localhost regardless of backend.
+Localhost-only enforcement is duplicated below for defense-in-depth.
 """
 import sys
 
@@ -27,7 +23,6 @@ def _enforce_localhost(args):
 def main() -> None:
     args = sys.argv[1:]
 
-    # Pop the optional --backend selector (defaults to text for back-compat).
     backend = "text"
     cleaned = []
     skip = False
@@ -42,13 +37,12 @@ def main() -> None:
         cleaned.append(arg)
 
     _enforce_localhost(cleaned)
-
-    # Re-write argv so the underlying server sees only its own flags.
     sys.argv = [sys.argv[0], *cleaned]
 
     if backend == "vision":
-        from mlx_vlm.server import main as vlm_main
-        vlm_main()
+        # vlm_server is a sibling module bundled alongside this entry point.
+        import vlm_server
+        vlm_server.main()
     else:
         from mlx_lm.server import main as lm_main
         lm_main()

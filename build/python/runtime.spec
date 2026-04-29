@@ -28,11 +28,11 @@ datas = (
 )
 
 a = Analysis(
-    ['runtime_entry.py'],
+    ['runtime_entry.py', 'vlm_server.py'],
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=hidden,
+    hiddenimports=hidden + ['vlm_server'],
     hookspath=[],
     runtime_hooks=[],
     excludes=['matplotlib', 'pandas', 'IPython', 'notebook', 'tkinter'],

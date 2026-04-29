@@ -13,6 +13,8 @@ import { openResponse, getResponseWindow } from './windows/response.js';
 import {
   appendTurn,
   createCaptureWithThread,
+  getTurns,
+  listRecent,
   setTags,
   setThreadTitle,
   setThumbnail,
@@ -54,6 +56,74 @@ export function startStream(): string {
   const streamId = randomUUID();
   openResponse(streamId);
   return streamId;
+}
+
+/**
+ * Continue an existing thread with a new user message. Streams the
+ * assistant's reply back to the response window via the same IPC events
+ * the initial answer uses, persists both turns to history.
+ */
+export async function continueThread(
+  threadId: string,
+  userMessage: string,
+  deps: PipelineDeps = DEFAULT_DEPS,
+): Promise<void> {
+  const win = () => getResponseWindow();
+  const send = (channel: string, payload: unknown) => {
+    win()?.webContents.send(channel, payload);
+  };
+  const streamId = randomUUID();
+  send('response:set-stream', { streamId });
+
+  try {
+    appendTurn(threadId, 'user', userMessage);
+  } catch (err) {
+    log.warn({ err: String(err) }, 'append user turn failed');
+  }
+
+  let answer = '';
+  const onTok = (chunk: string) => {
+    answer += chunk;
+    send('model:stream:token', { id: streamId, chunk });
+  };
+
+  try {
+    const turns = getTurns(threadId);
+    const systemPrompt = await loadPrompt('answer-text');
+    const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
+
+    // Reconstruct the conversation: original capture context as the first
+    // user turn, then the prior turns, then nothing extra (the user message
+    // is already the last turn after appendTurn above).
+    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+      { role: 'system', content: systemPrompt },
+    ];
+    // Find the OCR text from the capture associated with this thread.
+    const captures = findCapturesForThread(threadId);
+    if (captures && captures.ocr_text) {
+      messages.push({
+        role: 'user',
+        content: `Original capture (${captures.ocr_text.length} chars OCR):\n\n${captures.ocr_text}`,
+      });
+    }
+    for (const t of turns) {
+      messages.push({ role: t.role, content: t.content });
+    }
+
+    const stream = streamCompletion(cfg, { model: deps.textModel, messages });
+    for await (const tok of stream) onTok(tok);
+    send('model:stream:done', { id: streamId });
+
+    appendTurn(threadId, 'assistant', answer, deps.textModel);
+  } catch (err) {
+    log.error({ err: String(err), threadId }, 'continue thread failed');
+    send('model:stream:error', { id: streamId, error: String(err) });
+  }
+}
+
+function findCapturesForThread(threadId: string) {
+  // Most-recent capture for a thread (one per thread until v2.1).
+  return listRecent(500).find((c) => c.thread_id === threadId) ?? null;
 }
 
 /**
