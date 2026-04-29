@@ -1,13 +1,23 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
+import os from 'node:os';
 import { createLogger } from '../core/logger/index.js';
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
 import { closeOverlay, openOverlay } from './windows/overlay.js';
+import { openHistory } from './windows/history.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
 import { runPipeline, startStream } from './pipeline.js';
 import { destroyWorker } from '../core/ocr/tesseract.js';
+import {
+  closeStore,
+  listRecent,
+  openStore,
+  searchKeyword,
+  type CaptureRow,
+} from '../core/history/store.js';
+import { setMigrationsDir } from '../core/history/migrations.js';
 import type { CaptureBBox } from '../shared/types.js';
 
 const log = createLogger('main');
@@ -63,20 +73,58 @@ function wireIpc(): void {
       return { ok: false, error: String(err) };
     }
   });
+
+  ipcMain.handle('history:list', () => mapHistory(listRecent(200)));
+
+  ipcMain.handle('history:search', (_e, query: unknown) =>
+    mapHistory(searchKeyword(typeof query === 'string' ? query : '')),
+  );
+
+  ipcMain.handle('history:open', (_e, payload: unknown) => {
+    log.info({ payload }, 'history:open (continue thread P4)');
+    return { ok: true };
+  });
+}
+
+function mapHistory(rows: CaptureRow[]) {
+  return rows.map((r) => ({
+    id: r.id,
+    createdAt: r.created_at,
+    pngPath: r.png_path,
+    thumbPath: r.thumb_path,
+    ocrText: r.ocr_text,
+    tags: r.tags ? (JSON.parse(r.tags) as string[]) : [],
+    threadId: r.thread_id,
+  }));
 }
 
 function resolvePromptsDir(): string {
-  // In dev, app.getAppPath() points at the repo root. In packaged app, prompts/
-  // sits next to app.asar — accessed via process.resourcesPath.
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'prompts');
-  }
+  if (app.isPackaged) return path.join(process.resourcesPath, 'prompts');
   return path.join(app.getAppPath(), 'prompts');
 }
 
-app.whenReady().then(() => {
+function resolveMigrationsDir(): string {
+  if (app.isPackaged) return path.join(process.resourcesPath, 'migrations');
+  return path.join(app.getAppPath(), 'migrations');
+}
+
+function resolveDbPath(): string {
+  return path.join(
+    os.homedir(),
+    'Library',
+    'Application Support',
+    'Glint',
+    'glint.db',
+  );
+}
+
+app.whenReady().then(async () => {
   log.info('app ready');
   setPromptsDir(resolvePromptsDir());
+  setMigrationsDir(resolveMigrationsDir());
+  await openStore(resolveDbPath()).catch((err) =>
+    log.error({ err: String(err) }, 'store open failed'),
+  );
   wireIpc();
   createMainWindow();
 
@@ -86,7 +134,7 @@ app.whenReady().then(() => {
       if (!granted) return;
       openOverlay();
     },
-    onHistory: () => log.info('history hotkey (P3)'),
+    onHistory: () => openHistory(),
     onSettings: () => log.info('settings hotkey (P5)'),
   });
 
@@ -107,4 +155,5 @@ app.on('will-quit', () => {
 app.on('before-quit', async () => {
   log.info('before-quit; tearing down workers');
   await destroyWorker().catch((err) => log.warn({ err: String(err) }, 'ocr teardown'));
+  closeStore();
 });

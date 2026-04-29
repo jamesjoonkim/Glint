@@ -25,7 +25,7 @@ module.exports = {
       // 127.0.0.1 — that boundary is the explicit local-LLM IO. Everything else in
       // core/ stays network-free so the privacy promise holds at lint time.
       files: ['src/core/**/*.ts'],
-      excludedFiles: ['src/core/models/**/*.ts'],
+      excludedFiles: ['src/core/models/**/*.ts', 'src/core/embed/**/*.ts'],
       rules: {
         'no-restricted-globals': [
           'error',
@@ -44,9 +44,9 @@ module.exports = {
       },
     },
     {
-      // core/models/* talks to localhost MLX server only. Still no Electron, still no
-      // third-party HTTP libs — built-in fetch only, hardcoded 127.0.0.1.
-      files: ['src/core/models/**/*.ts'],
+      // core/models/* and core/embed/* talk to the localhost MLX server only.
+      // Same privacy contract — built-in fetch, hardcoded 127.0.0.1.
+      files: ['src/core/models/**/*.ts', 'src/core/embed/**/*.ts'],
       rules: {
         'no-restricted-imports': [
           'error',

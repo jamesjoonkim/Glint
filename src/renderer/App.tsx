@@ -1,6 +1,7 @@
 import styles from './App.module.css';
 import { SelectionOverlay } from './components/SelectionOverlay/index.js';
 import { ResponseWindow } from './components/ResponseWindow/index.js';
+import { HistoryPanel } from './components/HistoryPanel/index.js';
 
 function getView(): string {
   const params = new URLSearchParams(window.location.search);
@@ -12,7 +13,7 @@ export function App(): JSX.Element {
 
   if (view === 'overlay') return <SelectionOverlay />;
   if (view === 'response') return <ResponseWindow />;
-  if (view === 'history') return <div>History (P3)</div>;
+  if (view === 'history') return <HistoryPanel />;
   if (view === 'settings') return <div>Settings (P5)</div>;
   if (view === 'first-run') return <div>First-Run Wizard (P5)</div>;
 
