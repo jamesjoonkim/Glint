@@ -94,7 +94,16 @@ const config: ForgeConfig = {
             teamId: process.env.APPLE_TEAM_ID!,
           }
         : undefined,
-    extraResource: ['resources/runtime', 'resources/vss'].filter((p) => {
+    extraResource: [
+      // Bundled MLX runtime binary + sqlite-vss extension (optional).
+      'resources/runtime',
+      'resources/vss',
+      // Editable system prompts loaded by core/models/prompts.ts at runtime.
+      // Without these, the pipeline crashes with ENOENT before the LLM call.
+      'prompts',
+      // SQL migration files applied by history/migrations.ts at boot.
+      'migrations',
+    ].filter((p) => {
       try {
         require('fs').accessSync(p);
         return true;

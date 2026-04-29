@@ -74,7 +74,13 @@ function wireIpc(): void {
       const record = await captureBBox(bbox);
       log.info({ id: record.id }, 'capture complete');
       const streamId = startStream();
-      void runPipeline(record, streamId, getPipelineDeps());
+      // Wait for the runtime spawn promise before dispatching the pipeline.
+      // First-launch warmup can take ~25s; the response window's empty state
+      // shows the reading-the-capture animation until tokens arrive.
+      void (async () => {
+        await textRuntimePromise.catch(() => null);
+        return runPipeline(record, streamId, getPipelineDeps());
+      })();
       return { ok: true, id: record.id, streamId };
     } catch (err) {
       log.error({ err: String(err) }, 'capture failed');
@@ -167,10 +173,11 @@ function resolveModelPath(name: string): string {
   );
 }
 
-// eslint-disable-next-line prefer-const
+// Runtime spawn is async + slow on first launch (~25s for PyInstaller unpack
+// + model load). We hold a Promise so capture handlers can await it instead
+// of racing into a fetch against a server that hasn't bound its port yet.
 let textRuntime: RuntimeHandle | null = null;
-// vision runtime spawn lands when the wizard installs the model; declared now
-// for tear-down + dep wiring.
+let textRuntimePromise: Promise<RuntimeHandle | null> = Promise.resolve(null);
 const visionRuntime: RuntimeHandle | null = null;
 
 async function startTextRuntime(): Promise<RuntimeHandle | null> {
@@ -240,7 +247,9 @@ app.whenReady().then(async () => {
     log.error({ err: String(err) }, 'store open failed'),
   );
   // Start text runtime in background — UI can render before model is ready.
-  void startTextRuntime().then((h) => (textRuntime = h));
+  // Capture handlers await textRuntimePromise so they don't race the spawn.
+  textRuntimePromise = startTextRuntime();
+  void textRuntimePromise.then((h) => (textRuntime = h));
   wireIpc();
   createMainWindow();
 
