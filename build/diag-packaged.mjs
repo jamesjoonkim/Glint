@@ -26,12 +26,17 @@ response.on('console', m => m.type()==='error' && errors.push(m.text()));
 response.on('pageerror', e => errors.push('PAGE: '+e.message));
 await response.waitForLoadState('domcontentloaded');
 
-// Wait for streaming or error
-await new Promise(r => setTimeout(r, 10000));
+// Wait for streaming to complete (text route ≈ 3-8s + post-save async).
+console.log('waiting 35s for stream completion...');
+await new Promise(r => setTimeout(r, 35000));
 
-const text = await response.evaluate(() => document.body.innerText.slice(0, 600));
-console.log('\nresponse window text (10s after open):');
+const text = await response.evaluate(() => document.body.innerText.slice(0, 1500));
+console.log('\nresponse window text (35s after capture):');
 console.log(text);
 console.log('\nerrors:', errors);
 
+import fs from 'node:fs';
+fs.mkdirSync('.diag', { recursive: true });
+await response.screenshot({ path: '.diag/packaged-response.png' });
+console.log('saved .diag/packaged-response.png');
 await app.close();

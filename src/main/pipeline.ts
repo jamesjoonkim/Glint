@@ -109,9 +109,18 @@ export async function runPipeline(
       send('model:stream:token', { id: streamId, chunk });
     };
 
-    if (decision.route === 'vision') {
+    // Vision-route fallback: if vision runtime isn't available (most common
+    // case until first-run wizard wires up mlx_vlm), the text-LLM still does
+    // a useful job describing the OCR'd text + any visible structure. That
+    // beats showing 'Vision model not installed' to a user who just wanted
+    // their screenshot explained.
+    const canVision = !!deps.visionUrl || process.env.GLINT_LLM === 'fake';
+    if (decision.route === 'vision' && canVision) {
       await runVisionRoute(capture, streamId, deps, onTok);
     } else {
+      if (decision.route === 'vision') {
+        log.info({ id: capture.id }, 'vision unavailable — falling through to text route');
+      }
       await runTextRoute(capture, ocr, streamId, deps, onTok);
     }
     send('model:stream:done', { id: streamId });
@@ -179,18 +188,22 @@ async function runTextRoute(
 ): Promise<void> {
   const systemPrompt = await loadPrompt('answer-text');
   const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
+
+  // For low-confidence OCR (vision-route fallback), tell the model what we
+  // know about the capture so it can explain context the text alone misses.
+  const lowConfidence = ocr.confidence < 50 || ocr.charCount < 20;
+  const userMessage = lowConfidence
+    ? `The user captured a region of their screen (${capture.bbox.width}×${capture.bbox.height}px). OCR was uncertain (${ocr.charCount} chars, conf ${ocr.confidence.toFixed(0)}). Best-effort extracted text follows — explain what the screenshot is likely about, including any visible UI elements or structure suggested by the text.\n\n---\n${ocr.text || '(no text recognized)'}`
+    : `OCR (${ocr.charCount} chars, conf ${ocr.confidence.toFixed(0)}):\n\n${ocr.text}`;
+
   const stream = streamCompletion(cfg, {
     model: deps.textModel,
     messages: [
       { role: 'system', content: systemPrompt },
-      {
-        role: 'user',
-        content: `OCR (${ocr.charCount} chars, conf ${ocr.confidence.toFixed(0)}):\n\n${ocr.text}`,
-      },
+      { role: 'user', content: userMessage },
     ],
   });
   for await (const tok of stream) onTok(tok);
-  void capture;
 }
 
 async function runVisionRoute(

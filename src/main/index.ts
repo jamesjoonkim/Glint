@@ -74,11 +74,12 @@ function wireIpc(): void {
       const record = await captureBBox(bbox);
       log.info({ id: record.id }, 'capture complete');
       const streamId = startStream();
-      // Wait for the runtime spawn promise before dispatching the pipeline.
-      // First-launch warmup can take ~25s; the response window's empty state
+      // Wait for BOTH runtime spawns before dispatching — the router doesn't
+      // know yet whether this capture goes text or vision. First-launch
+      // warmup can take ~25s per model; the response window's empty state
       // shows the reading-the-capture animation until tokens arrive.
       void (async () => {
-        await textRuntimePromise.catch(() => null);
+        await Promise.allSettled([textRuntimePromise, visionRuntimePromise]);
         return runPipeline(record, streamId, getPipelineDeps());
       })();
       return { ok: true, id: record.id, streamId };
@@ -174,42 +175,56 @@ function resolveModelPath(name: string): string {
 }
 
 // Runtime spawn is async + slow on first launch (~25s for PyInstaller unpack
-// + model load). We hold a Promise so capture handlers can await it instead
-// of racing into a fetch against a server that hasn't bound its port yet.
+// + model load). We hold Promises so capture handlers can await them
+// instead of racing into a fetch against a server that hasn't bound its
+// port yet. Two runtimes — text on 8765, vision on 8766 — are independent.
 let textRuntime: RuntimeHandle | null = null;
 let textRuntimePromise: Promise<RuntimeHandle | null> = Promise.resolve(null);
-const visionRuntime: RuntimeHandle | null = null;
+let visionRuntime: RuntimeHandle | null = null;
+let visionRuntimePromise: Promise<RuntimeHandle | null> = Promise.resolve(null);
 
-async function startTextRuntime(): Promise<RuntimeHandle | null> {
+type RuntimeKind = 'text' | 'vision';
+const RUNTIME_CONFIG: Record<
+  RuntimeKind,
+  { modelDir: string; preferredPort: number }
+> = {
+  text:   { modelDir: 'qwen2.5-7b-mlx',   preferredPort: 8765 },
+  vision: { modelDir: 'qwen2-vl-7b-mlx',  preferredPort: 8766 },
+};
+
+async function startNamedRuntime(kind: RuntimeKind): Promise<RuntimeHandle | null> {
   const fs = await import('node:fs');
   const mode = resolveLlmMode();
 
   if (mode === 'fake') {
-    log.info({ reason: 'env or test' }, 'fake LLM mode — skipping runtime spawn');
+    log.info({ kind, reason: 'env or test' }, 'fake LLM mode — skipping runtime spawn');
     return null;
   }
 
+  const cfg = RUNTIME_CONFIG[kind];
   const binaryPath = resolveRuntimeBinary();
-  const modelPath = resolveModelPath('qwen2.5-7b-mlx');
+  const modelPath = resolveModelPath(cfg.modelDir);
 
-  // Auto-fallback: if either the runtime binary or the text model is missing,
-  // we can't usefully spawn. Surface this in logs and let the pipeline emit a
-  // helpful message instead of timing out at health-check.
   if (!fs.existsSync(binaryPath)) {
-    log.warn({ binaryPath }, 'runtime binary missing — fake mode');
+    log.warn({ kind, binaryPath }, 'runtime binary missing — fake mode');
     return null;
   }
   if (!fs.existsSync(modelPath)) {
-    log.warn({ modelPath }, 'text model missing — fake mode (run first-run wizard)');
+    log.warn({ kind, modelPath }, `${kind} model missing — skipping spawn (run first-run wizard)`);
     return null;
   }
 
   try {
-    const handle = await startRuntime({ binaryPath, modelPath, preferredPort: 8765 });
-    log.info({ url: handle.url, pid: handle.pid }, 'text runtime live');
+    const handle = await startRuntime({
+      binaryPath,
+      modelPath,
+      preferredPort: cfg.preferredPort,
+      backend: kind,
+    });
+    log.info({ kind, url: handle.url, pid: handle.pid }, `${kind} runtime live`);
     return handle;
   } catch (err) {
-    log.error({ err: String(err) }, 'text runtime spawn failed');
+    log.error({ kind, err: String(err) }, `${kind} runtime spawn failed`);
     return null;
   }
 }
@@ -237,6 +252,8 @@ function getPipelineDeps(): PipelineDeps {
   };
 }
 
+void visionRuntime; // referenced in tear-down + getPipelineDeps
+
 app.whenReady().then(async () => {
   log.info('app ready');
   setPromptsDir(resolvePromptsDir());
@@ -246,10 +263,12 @@ app.whenReady().then(async () => {
   }).catch((err) =>
     log.error({ err: String(err) }, 'store open failed'),
   );
-  // Start text runtime in background — UI can render before model is ready.
-  // Capture handlers await textRuntimePromise so they don't race the spawn.
-  textRuntimePromise = startTextRuntime();
+  // Start text + vision runtimes in parallel — UI is interactive immediately,
+  // capture handlers await the relevant promise before dispatching.
+  textRuntimePromise = startNamedRuntime('text');
+  visionRuntimePromise = startNamedRuntime('vision');
   void textRuntimePromise.then((h) => (textRuntime = h));
+  void visionRuntimePromise.then((h) => (visionRuntime = h));
   wireIpc();
   createMainWindow();
 
@@ -282,9 +301,7 @@ app.on('before-quit', async () => {
   await Promise.allSettled([
     destroyWorker().catch((err) => log.warn({ err: String(err) }, 'ocr teardown')),
     textRuntime?.stop().catch((err: unknown) => log.warn({ err: String(err) }, 'text runtime stop')),
-    (visionRuntime as RuntimeHandle | null)?.stop().catch((err: unknown) =>
-      log.warn({ err: String(err) }, 'vision runtime stop'),
-    ),
+    visionRuntime?.stop().catch((err: unknown) => log.warn({ err: String(err) }, 'vision runtime stop')),
   ]);
   closeStore();
 });
