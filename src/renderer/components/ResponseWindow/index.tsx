@@ -1,18 +1,15 @@
-import { useEffect, useState } from 'react';
-import { MarkdownView } from './MarkdownView.js';
+import { useEffect, useRef, useState } from 'react';
 import { Header } from './Header.js';
 import { EmptyState } from './EmptyState.js';
 import { ChatReply } from './ChatReply.js';
+import { TurnList, type Turn, type ReplayCapture } from './TurnList.js';
 import { useStream } from '../../hooks/useStream.js';
 import styles from './styles.module.css';
-
-type Turn = { role: 'user' | 'assistant' | 'system'; content: string };
 
 function getStreamIdFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('streamId');
-  // Replay sentinels start with 'replay-' — main passes them so the response
-  // window can mount, but they aren't real stream ids. Treat as null.
+  // Replay sentinels start with 'replay-'; not real stream ids.
   if (!id || id.startsWith('replay-')) return null;
   return id;
 }
@@ -20,8 +17,35 @@ function getStreamIdFromUrl(): string | null {
 export function ResponseWindow(): JSX.Element {
   const [streamId, setStreamId] = useState<string | null>(getStreamIdFromUrl());
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [replayText, setReplayText] = useState<string | null>(null);
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [capture, setCapture] = useState<ReplayCapture | undefined>(undefined);
   const stream = useStream(streamId);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  const refreshTurns = (id: string) => {
+    void (async () => {
+      const res = (await window.glint?.invoke?.('thread:getTurns', { threadId: id })) as
+        | { ok: boolean; turns?: Turn[] }
+        | undefined;
+      // Only overwrite when the DB actually has turns. An empty result is
+      // almost always a race against the in-flight write — keep the last
+      // good state rather than blanking the UI.
+      if (res?.ok && Array.isArray(res.turns) && res.turns.length > 0) {
+        setTurns(res.turns);
+      }
+    })();
+  };
+
+  const refreshCapture = (id: string) => {
+    void (async () => {
+      const res = (await window.glint?.invoke?.('thread:getCapture', { threadId: id })) as
+        | { ok: boolean; capture?: { id: string; createdAt: number } }
+        | undefined;
+      if (res?.ok && res.capture) {
+        setCapture({ id: res.capture.id, createdAt: res.capture.createdAt });
+      }
+    })();
+  };
 
   useEffect(() => {
     const safeSubscribe = (channel: string, fn: (e: unknown, p: unknown) => void) => {
@@ -32,42 +56,37 @@ export function ResponseWindow(): JSX.Element {
         return undefined;
       }
     };
-    const offStream = safeSubscribe(
-      'response:set-stream',
-      (_e: unknown, payload: unknown) => {
-        const id = (payload as { streamId?: unknown })?.streamId;
-        if (typeof id === 'string') {
-          // Live stream supersedes replay content.
-          setReplayText(null);
-          setStreamId(id);
+    const offStream = safeSubscribe('response:set-stream', (_e, p) => {
+      const id = (p as { streamId?: unknown })?.streamId;
+      // New stream id arrives both for fresh captures AND for follow-up
+      // messages on the same thread. Don't touch turns/capture here — the
+      // thread handler below decides whether the conversation actually
+      // changed.
+      if (typeof id === 'string') setStreamId(id);
+    });
+    const offThread = safeSubscribe('response:set-thread', (_e, p) => {
+      const id = (p as { threadId?: unknown })?.threadId;
+      if (typeof id !== 'string') return;
+      setThreadId((prev) => {
+        if (prev !== id) {
+          // Thread actually changed → wipe stale state from a prior capture.
+          setTurns([]);
+          setCapture(undefined);
         }
-      },
-    );
-    const offThread = safeSubscribe(
-      'response:set-thread',
-      (_e: unknown, payload: unknown) => {
-        const id = (payload as { threadId?: unknown })?.threadId;
-        if (typeof id === 'string') setThreadId(id);
-      },
-    );
-    const offReplay = safeSubscribe(
-      'response:replay',
-      (_e: unknown, payload: unknown) => {
-        const id = (payload as { threadId?: unknown })?.threadId;
-        if (typeof id !== 'string') return;
-        void (async () => {
-          const res = (await window.glint?.invoke?.('thread:getTurns', { threadId: id })) as
-            | { ok: boolean; turns?: Turn[] }
-            | undefined;
-          if (!res?.ok || !Array.isArray(res.turns)) return;
-          // Show the last assistant turn (initial answer + any follow-ups
-          // collapse to the most recent reply for now — TurnList view is P4.1).
-          const lastAssistant = [...res.turns].reverse().find((t) => t.role === 'assistant');
-          setReplayText(lastAssistant?.content ?? '');
-          setStreamId(null);
-        })();
-      },
-    );
+        return id;
+      });
+      refreshCapture(id);
+      // No refreshTurns for a fresh capture (turns don't exist yet); the
+      // done-handler below loads them once the assistant turn is persisted.
+    });
+    const offReplay = safeSubscribe('response:replay', (_e, p) => {
+      const id = (p as { threadId?: unknown })?.threadId;
+      if (typeof id === 'string') {
+        setStreamId(null);
+        refreshTurns(id);
+        refreshCapture(id);
+      }
+    });
     return () => {
       offStream?.();
       offThread?.();
@@ -75,35 +94,66 @@ export function ResponseWindow(): JSX.Element {
     };
   }, []);
 
-  const isReplay = replayText !== null;
-  const displayText = isReplay ? replayText : stream.text;
-  const status = isReplay
-    ? 'done'
-    : stream.error
-      ? 'error'
-      : stream.done
-        ? 'done'
-        : stream.text.length > 0
-          ? 'streaming'
-          : 'warming';
+  // When a stream completes, immediately materialize the streamed text as a
+  // permanent assistant bubble — otherwise there's a visible gap between
+  // when liveStreaming disappears (gated on !stream.done) and when the
+  // refreshTurns IPC round-trip resolves. Then refresh from the DB to swap
+  // the optimistic content for the canonical row (same text, real id+model).
+  const lastDoneStreamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!stream.done || !streamId || !threadId) return;
+    if (lastDoneStreamRef.current === streamId) return;
+    lastDoneStreamRef.current = streamId;
+    if (stream.text.trim()) {
+      setTurns((prev) => [...prev, { role: 'assistant', content: stream.text }]);
+    }
+    refreshTurns(threadId);
+  }, [stream.done, stream.text, streamId, threadId]);
+
+  // Auto-scroll to bottom on new tokens.
+  useEffect(() => {
+    bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' });
+  }, [stream.text, turns.length]);
+
+  const status = stream.error
+    ? 'error'
+    : streamId && !stream.done
+      ? stream.text.length > 0
+        ? 'streaming'
+        : 'warming'
+      : 'done';
 
   const handleReply = (text: string) => {
     if (!threadId) return;
+    // Optimistic: show user bubble immediately.
+    setTurns((prev) => [...prev, { role: 'user', content: text }]);
     void window.glint?.invoke?.('thread:appendTurn', { threadId, content: text });
   };
 
-  const replyDisabled = !threadId || (!isReplay && !stream.done);
+  const replyDisabled = !threadId || (streamId !== null && !stream.done);
+
+  // While streaming AFTER the initial answer, the live tokens belong to a
+  // new assistant turn that isn't in `turns` yet (we'll refetch on done).
+  // For the initial capture's first stream, `turns` is empty; the streaming
+  // bubble is the only thing on screen.
+  const liveStreaming: { content: string; phase: 'warming' | 'streaming' } | undefined =
+    streamId && !stream.done
+      ? {
+          content: stream.text,
+          phase: stream.text.length > 0 ? 'streaming' : 'warming',
+        }
+      : undefined;
 
   return (
     <div className={styles.root}>
       <Header status={status} />
-      <main className={styles.body}>
-        {stream.error && !isReplay ? (
+      <main className={styles.body} ref={bodyRef}>
+        {stream.error ? (
           <ErrorView message={stream.error} />
-        ) : !displayText ? (
-          <EmptyState phase={status === 'streaming' ? 'thinking' : 'reading'} />
+        ) : turns.length === 0 && !liveStreaming && !capture ? (
+          <EmptyState phase="reading" />
         ) : (
-          <MarkdownView source={displayText} />
+          <TurnList turns={turns} capture={capture} streaming={liveStreaming} />
         )}
       </main>
       <footer className={styles.footer}>

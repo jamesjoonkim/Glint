@@ -315,6 +315,101 @@
 
 .md hr { border: none; border-top: 1px solid var(--hairline); margin: 18px 0; }
 
+/* ─── turn list (multi-turn conversation) ───────────────────── */
+
+.turnList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.bubble {
+  border-radius: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--hairline);
+  word-break: break-word;
+}
+
+.bubbleUser {
+  align-self: flex-end;
+  width: fit-content;
+  max-width: 75%;
+  padding: 8px 14px;
+  background: rgba(245, 185, 69, 0.08);
+  border-color: rgba(245, 185, 69, 0.18);
+  border-radius: 16px;
+  color: var(--text);
+}
+.bubbleUser .md {
+  font-size: 13.5px;
+}
+.bubbleUser .md p {
+  margin: 0;
+}
+
+/* Capture bubble: an image acting as the first "user turn" in replay. */
+.bubbleCapture {
+  align-self: flex-end;
+  width: auto;
+  max-width: 85%;
+  padding: 0;
+  background: transparent;
+  border-color: rgba(245, 185, 69, 0.18);
+  overflow: hidden;
+  border-radius: 14px;
+}
+.captureImage {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+  background: var(--bg-deep);
+}
+.captureMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  background: rgba(245, 185, 69, 0.04);
+}
+
+.bubbleAssistant {
+  align-self: stretch;
+  background: transparent;
+  border-color: transparent;
+  padding: 4px 0;
+}
+
+.bubblePending {
+  position: relative;
+}
+.bubblePending::after {
+  content: '▍';
+  display: inline-block;
+  margin-left: 2px;
+  color: var(--spark);
+  animation: caretBlink 1s steps(2) infinite;
+}
+
+.warming {
+  display: inline-block;
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 13px;
+}
+
+@keyframes caretBlink {
+  to { opacity: 0; }
+}
+
 .md table {
   border-collapse: collapse;
   margin: 12px 0;
