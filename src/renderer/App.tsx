@@ -1,4 +1,3 @@
-import styles from './App.module.css';
 import { SelectionOverlay } from './components/SelectionOverlay/index.js';
 import { ResponseWindow } from './components/ResponseWindow/index.js';
 import { HistoryPanel } from './components/HistoryPanel/index.js';
@@ -19,19 +18,7 @@ export function App(): JSX.Element {
   if (view === 'settings') return <Settings />;
   if (view === 'first-run') return <FirstRun />;
 
-  return (
-    <div className={styles.shell}>
-      <header className={styles.header}>
-        <span className={styles.brand}>Glint v2</span>
-        <span className={styles.tag}>local-first · pre-alpha</span>
-      </header>
-      <main className={styles.main}>
-        <h1 className={styles.title}>Bootstrap OK</h1>
-        <p className={styles.body}>
-          P0 + P1 hotkey scaffold live. Press <code>⌘⇧X</code> to test the marquee overlay.
-        </p>
-        <code className={styles.code}>⌘⇧X · ⌘⇧H · ⌘,</code>
-      </main>
-    </div>
-  );
+  // Main window = dashboard. HistoryPanel renders the gallery of past
+  // captures + lets you reopen any thread in the response window.
+  return <HistoryPanel />;
 }

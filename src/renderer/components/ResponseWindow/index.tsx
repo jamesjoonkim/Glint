@@ -6,20 +6,24 @@ import { ChatReply } from './ChatReply.js';
 import { useStream } from '../../hooks/useStream.js';
 import styles from './styles.module.css';
 
+type Turn = { role: 'user' | 'assistant' | 'system'; content: string };
+
 function getStreamIdFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
-  return params.get('streamId');
+  const id = params.get('streamId');
+  // Replay sentinels start with 'replay-' — main passes them so the response
+  // window can mount, but they aren't real stream ids. Treat as null.
+  if (!id || id.startsWith('replay-')) return null;
+  return id;
 }
 
 export function ResponseWindow(): JSX.Element {
   const [streamId, setStreamId] = useState<string | null>(getStreamIdFromUrl());
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [replayText, setReplayText] = useState<string | null>(null);
   const stream = useStream(streamId);
 
   useEffect(() => {
-    // Wrap subscribe calls so a single allowlist mismatch (or any throw)
-    // doesn't abort the whole effect — that would leave React without
-    // cleanup and the response window in a half-mounted state.
     const safeSubscribe = (channel: string, fn: (e: unknown, p: unknown) => void) => {
       try {
         return window.glint?.subscribe?.(channel, fn);
@@ -32,7 +36,11 @@ export function ResponseWindow(): JSX.Element {
       'response:set-stream',
       (_e: unknown, payload: unknown) => {
         const id = (payload as { streamId?: unknown })?.streamId;
-        if (typeof id === 'string') setStreamId(id);
+        if (typeof id === 'string') {
+          // Live stream supersedes replay content.
+          setReplayText(null);
+          setStreamId(id);
+        }
       },
     );
     const offThread = safeSubscribe(
@@ -42,39 +50,64 @@ export function ResponseWindow(): JSX.Element {
         if (typeof id === 'string') setThreadId(id);
       },
     );
+    const offReplay = safeSubscribe(
+      'response:replay',
+      (_e: unknown, payload: unknown) => {
+        const id = (payload as { threadId?: unknown })?.threadId;
+        if (typeof id !== 'string') return;
+        void (async () => {
+          const res = (await window.glint?.invoke?.('thread:getTurns', { threadId: id })) as
+            | { ok: boolean; turns?: Turn[] }
+            | undefined;
+          if (!res?.ok || !Array.isArray(res.turns)) return;
+          // Show the last assistant turn (initial answer + any follow-ups
+          // collapse to the most recent reply for now — TurnList view is P4.1).
+          const lastAssistant = [...res.turns].reverse().find((t) => t.role === 'assistant');
+          setReplayText(lastAssistant?.content ?? '');
+          setStreamId(null);
+        })();
+      },
+    );
     return () => {
       offStream?.();
       offThread?.();
+      offReplay?.();
     };
   }, []);
 
-  const status = stream.error
-    ? 'error'
-    : stream.done
-      ? 'done'
-      : stream.text.length > 0
-        ? 'streaming'
-        : 'warming';
+  const isReplay = replayText !== null;
+  const displayText = isReplay ? replayText : stream.text;
+  const status = isReplay
+    ? 'done'
+    : stream.error
+      ? 'error'
+      : stream.done
+        ? 'done'
+        : stream.text.length > 0
+          ? 'streaming'
+          : 'warming';
 
   const handleReply = (text: string) => {
     if (!threadId) return;
     void window.glint?.invoke?.('thread:appendTurn', { threadId, content: text });
   };
 
+  const replyDisabled = !threadId || (!isReplay && !stream.done);
+
   return (
     <div className={styles.root}>
       <Header status={status} />
       <main className={styles.body}>
-        {stream.error ? (
+        {stream.error && !isReplay ? (
           <ErrorView message={stream.error} />
-        ) : stream.text.length === 0 ? (
+        ) : !displayText ? (
           <EmptyState phase={status === 'streaming' ? 'thinking' : 'reading'} />
         ) : (
-          <MarkdownView source={stream.text} />
+          <MarkdownView source={displayText} />
         )}
       </main>
       <footer className={styles.footer}>
-        <ChatReply disabled={!stream.done || !threadId} onSend={handleReply} />
+        <ChatReply disabled={replyDisabled} onSend={handleReply} />
       </footer>
     </div>
   );

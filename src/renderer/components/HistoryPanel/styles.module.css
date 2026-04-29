@@ -39,6 +39,45 @@
 }
 .search:focus { border-color: #3b82f6; }
 
+.hint {
+  -webkit-app-region: no-drag;
+  font-size: 11px;
+  color: #64748b;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.hint kbd {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-right: 6px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+.empty h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: #cbd5e1;
+  font-weight: 500;
+}
+.empty p {
+  margin: 0 auto;
+  max-width: 360px;
+  line-height: 1.6;
+}
+.empty kbd {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+
 .body {
   flex: 1;
   overflow-y: auto;

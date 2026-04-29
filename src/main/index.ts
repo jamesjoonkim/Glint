@@ -2,6 +2,15 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import { createLogger } from '../core/logger/index.js';
+import {
+  registerAssetSchemePrivileged,
+  registerAssetProtocolHandler,
+} from './asset-protocol.js';
+import { backfillThumbnails } from '../core/history/backfill.js';
+
+// Privileged schemes must register synchronously at module load — before
+// app.whenReady — or Chromium refuses to treat them as standard URLs.
+registerAssetSchemePrivileged();
 
 // Catch otherwise-silent main-process failures and surface them via the
 // daily logger. Without this an early throw vanishes (Electron just exits
@@ -15,14 +24,16 @@ process.on('unhandledRejection', (e) => {
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
 import { closeOverlay, openOverlay } from './windows/overlay.js';
 import { openHistory } from './windows/history.js';
+import { onResponseClosed, openResponse } from './windows/response.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
-import { runPipeline, startStream, type PipelineDeps } from './pipeline.js';
+import { continueThread, runPipeline, startStream, type PipelineDeps } from './pipeline.js';
 import { destroyWorker } from '../core/ocr/tesseract.js';
 import { startRuntime, type RuntimeHandle } from '../core/models/runtime.js';
 import {
   closeStore,
+  getTurns,
   listRecent,
   openStore,
   searchKeyword,
@@ -35,7 +46,14 @@ const log = createLogger('main');
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 
+let mainWindow: BrowserWindow | null = null;
+
 function createMainWindow(): BrowserWindow {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    return mainWindow;
+  }
   const win = new BrowserWindow({
     width: 1024,
     height: 720,
@@ -57,7 +75,25 @@ function createMainWindow(): BrowserWindow {
   }
 
   win.once('ready-to-show', () => win.show());
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+  mainWindow = win;
   return win;
+}
+
+function hideMainWindow(): void {
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+    mainWindow.hide();
+  }
+}
+
+function showMainWindow(): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+  } else {
+    createMainWindow();
+  }
 }
 
 function wireIpc(): void {
@@ -70,6 +106,7 @@ function wireIpc(): void {
 
   ipcMain.handle('capture:request', async (_e, bbox: CaptureBBox) => {
     closeOverlay(); // dismiss before capturing so it isn't in the frame
+    hideMainWindow(); // dashboard out of frame while answer streams
     try {
       const record = await captureBBox(bbox);
       log.info({ id: record.id }, 'capture complete');
@@ -96,7 +133,71 @@ function wireIpc(): void {
   );
 
   ipcMain.handle('history:open', (_e, payload: unknown) => {
-    log.info({ payload }, 'history:open (continue thread P4)');
+    const captureId = (payload as { captureId?: unknown })?.captureId;
+    if (typeof captureId !== 'string') return { ok: false, error: 'invalid captureId' };
+    const row = listRecent(500).find((r) => r.id === captureId);
+    if (!row) return { ok: false, error: 'capture not found' };
+    const threadId = row.thread_id;
+    if (!threadId) return { ok: false, error: 'capture has no thread' };
+    hideMainWindow();
+    // Open (or focus) response window in replay mode — no live stream id;
+    // the renderer pulls saved turns via thread:getTurns.
+    const win = openResponse(`replay-${threadId}`);
+    win.webContents.once('did-finish-load', () => {
+      win.webContents.send('response:set-thread', { threadId });
+      win.webContents.send('response:replay', { threadId });
+    });
+    // Existing window: send immediately.
+    if (!win.webContents.isLoading()) {
+      win.webContents.send('response:set-thread', { threadId });
+      win.webContents.send('response:replay', { threadId });
+    }
+    return { ok: true, threadId };
+  });
+
+  ipcMain.handle('thread:getTurns', (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
+    return { ok: true, turns: getTurns(threadId) };
+  });
+
+  ipcMain.handle('thread:getCapture', (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
+    // Threads may have many captures over time, but for replay we want the
+    // first one — that's the original screenshot the conversation is about.
+    const rows = listRecent(500);
+    const head = rows
+      .filter((r) => r.thread_id === threadId)
+      .sort((a, b) => a.created_at - b.created_at)[0];
+    if (!head) return { ok: false, error: 'no capture for thread' };
+    return {
+      ok: true,
+      capture: {
+        id: head.id,
+        createdAt: head.created_at,
+        ocrText: head.ocr_text,
+        tags: head.tags ? (JSON.parse(head.tags) as string[]) : [],
+      },
+    };
+  });
+
+  ipcMain.handle('thread:appendTurn', async (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    const content = (payload as { content?: unknown })?.content;
+    if (typeof threadId !== 'string' || typeof content !== 'string') {
+      return { ok: false, error: 'invalid payload' };
+    }
+    // Don't await — continueThread streams tokens via webContents.send and
+    // returns when the model finishes. The renderer doesn't need a result.
+    void (async () => {
+      await textRuntimePromise.catch(() => null);
+      try {
+        await continueThread(threadId, content, getPipelineDeps());
+      } catch (err) {
+        log.error({ err: String(err), threadId }, 'continueThread failed');
+      }
+    })();
     return { ok: true };
   });
 }
@@ -137,6 +238,16 @@ function resolveDbPath(): string {
     'Application Support',
     'Glint',
     'glint.db',
+  );
+}
+
+function resolveCapturesDir(): string {
+  return path.join(
+    os.homedir(),
+    'Library',
+    'Application Support',
+    'Glint',
+    'captures',
   );
 }
 
@@ -188,8 +299,8 @@ const RUNTIME_CONFIG: Record<
   RuntimeKind,
   { modelDir: string; preferredPort: number }
 > = {
-  text:   { modelDir: 'qwen2.5-7b-mlx',   preferredPort: 8765 },
-  vision: { modelDir: 'qwen2-vl-7b-mlx',  preferredPort: 8766 },
+  text:   { modelDir: 'qwen2.5-7b-mlx',     preferredPort: 8765 },
+  vision: { modelDir: 'qwen3-vl-8b-mlx',    preferredPort: 8766 },
 };
 
 async function startNamedRuntime(kind: RuntimeKind): Promise<RuntimeHandle | null> {
@@ -263,6 +374,14 @@ app.whenReady().then(async () => {
   }).catch((err) =>
     log.error({ err: String(err) }, 'store open failed'),
   );
+  // Custom protocol must register after the store opens — the resolver
+  // does a DB lookup on every request to translate ids → file paths.
+  registerAssetProtocolHandler(resolveCapturesDir());
+  // Backfill missing thumbs in the background. Don't await — this can take
+  // 5–10s for ~30 captures and would block UI startup.
+  void backfillThumbnails().catch((err) =>
+    log.warn({ err: String(err) }, 'backfill failed'),
+  );
   // Start text + vision runtimes in parallel — UI is interactive immediately,
   // capture handlers await the relevant promise before dispatching.
   textRuntimePromise = startNamedRuntime('text');
@@ -271,6 +390,7 @@ app.whenReady().then(async () => {
   void visionRuntimePromise.then((h) => (visionRuntime = h));
   wireIpc();
   createMainWindow();
+  onResponseClosed(() => showMainWindow());
 
   registerHotkeys(DEFAULT_BINDINGS, {
     onCapture: async () => {

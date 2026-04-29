@@ -20,6 +20,25 @@ import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
+# PyInstaller + namespace-package fix: transformers' is_mlx_available() uses
+# importlib.util.find_spec("mlx"), which returns None inside frozen bundles
+# even when mlx is fully bundled (mlx is a namespace package). Force-flip the
+# flag BEFORE importing mlx_vlm so BatchFeature(...).convert_to_tensors("mlx")
+# succeeds. Without this, image preprocessing throws:
+#   "Unable to convert output to MLX tensors format, MLX is not installed."
+def _force_mlx_available() -> None:
+    try:
+        import transformers.utils.import_utils as iu  # type: ignore
+        iu._mlx_available = True
+        # Newer transformers cache via lru: clear if present.
+        if hasattr(iu, "is_mlx_available") and hasattr(iu.is_mlx_available, "cache_clear"):
+            iu.is_mlx_available.cache_clear()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[vlm-server] mlx-availability patch skipped: {exc}", file=sys.stderr, flush=True)
+
+
+_force_mlx_available()
+
 # Lazy imports — touched only after CLI args parsed.
 _model = None
 _processor = None

@@ -24,7 +24,9 @@ export const IPC = {
   // threads (P4+)
   thread: {
     get: 'thread:get',
+    getCapture: 'thread:getCapture',
     appendTurn: 'thread:appendTurn',
+    getTurns: 'thread:getTurns',
   },
   // settings (P5)
   settings: {

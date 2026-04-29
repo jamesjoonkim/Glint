@@ -7,6 +7,13 @@ const log = createLogger('window:response');
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 
 let response: BrowserWindow | null = null;
+const closeListeners = new Set<() => void>();
+
+/** Subscribe to response-window-closed events (used to restore main window). */
+export function onResponseClosed(fn: () => void): () => void {
+  closeListeners.add(fn);
+  return () => closeListeners.delete(fn);
+}
 
 /**
  * Open (or focus) the floating response window for a given stream id.
@@ -42,7 +49,16 @@ export function openResponse(streamId: string): BrowserWindow {
 
   void response.loadURL(url);
   response.once('ready-to-show', () => response?.show());
-  response.on('closed', () => (response = null));
+  response.on('closed', () => {
+    response = null;
+    for (const fn of closeListeners) {
+      try {
+        fn();
+      } catch (err) {
+        log.warn({ err: String(err) }, 'closeListener threw');
+      }
+    }
+  });
 
   log.info({ streamId }, 'response window opened');
   return response;

@@ -13,6 +13,7 @@ const PUSH_CHANNELS = new Set<string>([
   'model:stream:error',
   'response:set-stream',
   'response:set-thread',
+  'response:replay',
 ]);
 
 const api = Object.freeze({

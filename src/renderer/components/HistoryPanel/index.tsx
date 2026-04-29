@@ -59,7 +59,7 @@ export function HistoryPanel(): JSX.Element {
   return (
     <div className={styles.root}>
       <header className={styles.header}>
-        <span className={styles.brand}>History</span>
+        <span className={styles.brand}>Glint</span>
         <input
           type="search"
           className={styles.search}
@@ -69,14 +69,23 @@ export function HistoryPanel(): JSX.Element {
           onKeyDown={(e) => {
             if (e.key === 'Enter') void load(q);
           }}
-          aria-label="Search history"
+          aria-label="Search captures"
         />
+        <span className={styles.hint}>
+          <kbd>⌘⇧X</kbd> to capture
+        </span>
       </header>
       <main className={styles.body}>
         {error && <div className={styles.error}>error: {error}</div>}
         {loading && !error && <div className={styles.loading}>loading…</div>}
         {!loading && items.length === 0 && !error && (
-          <div className={styles.empty}>No captures yet. Press ⌘⇧X to make one.</div>
+          <div className={styles.empty}>
+            <h2>No captures yet</h2>
+            <p>
+              Press <kbd>⌘⇧X</kbd> anywhere on your Mac to grab a region — Glint reads it,
+              answers it, and saves the thread here.
+            </p>
+          </div>
         )}
         <div className={styles.grid}>
           {items.map((item) => (
