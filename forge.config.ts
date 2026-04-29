@@ -1,11 +1,16 @@
 import type { ForgeConfig } from '@electron-forge/shared-types';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { MakerDMG } from '@electron-forge/maker-dmg';
 import { MakerZIP } from '@electron-forge/maker-zip';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    // Native modules (better-sqlite3, etc.) must live OUTSIDE the asar
+    // archive so dlopen can resolve their .node files at runtime.
+    asar: {
+      unpack: '**/{*.node,better-sqlite3,better_sqlite3.node}',
+    },
     name: 'Glint',
     appBundleId: 'app.glint.macos',
     appCategoryType: 'public.app-category.productivity',
@@ -36,6 +41,7 @@ const config: ForgeConfig = {
     new MakerZIP({}, ['darwin']),
   ],
   plugins: [
+    new AutoUnpackNativesPlugin({}),
     new VitePlugin({
       build: [
         { entry: 'src/main/index.ts', config: 'vite.main.config.ts', target: 'main' },
