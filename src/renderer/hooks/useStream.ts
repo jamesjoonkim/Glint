@@ -6,21 +6,45 @@ export type StreamState = {
   error: string | null;
 };
 
+export type StreamHandle = StreamState & {
+  /**
+   * Set the active stream id SYNCHRONOUSLY. Call this from the IPC handler
+   * for `response:set-stream` BEFORE main has a chance to fire the first
+   * token — passing through React state would lose tokens to the render
+   * cycle gap.
+   */
+  setStreamId: (id: string | null) => void;
+};
+
 /**
- * Subscribe to a model token stream from the main process and accumulate text
- * into a single buffer. Re-renders are batched via requestAnimationFrame so we
- * don't churn the renderer when tokens arrive faster than 60fps.
+ * Subscribe to a model token stream from the main process and accumulate
+ * text into a single buffer. Re-renders are batched via requestAnimationFrame
+ * so we don't churn the renderer when tokens arrive faster than 60fps.
+ *
+ * Subscriptions register ONCE on mount (not per-streamId) — otherwise the
+ * subscribe call lands AFTER main has already started firing tokens for the
+ * round, dropping the first events and the done event with them. The current
+ * streamId lives in a ref; listeners filter by that ref so events for stale
+ * streams are ignored. setStreamId() updates the ref synchronously so a
+ * stream that switches mid-tick doesn't drop its first chunk.
  */
-export function useStream(streamId: string | null): StreamState {
+export function useStream(initialStreamId: string | null = null): StreamHandle {
   const [state, setState] = useState<StreamState>({ text: '', done: false, error: null });
   const bufferRef = useRef<string>('');
   const rafRef = useRef<number | null>(null);
+  const streamIdRef = useRef<string | null>(initialStreamId);
+
+  const setStreamId = (id: string | null): void => {
+    streamIdRef.current = id;
+    bufferRef.current = '';
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    setState({ text: '', done: false, error: null });
+  };
 
   useEffect(() => {
-    if (!streamId) return;
-    bufferRef.current = '';
-    setState({ text: '', done: false, error: null });
-
     const flush = () => {
       rafRef.current = null;
       setState((prev) => ({ ...prev, text: bufferRef.current }));
@@ -31,11 +55,16 @@ export function useStream(streamId: string | null): StreamState {
       rafRef.current = requestAnimationFrame(flush);
     };
 
-    const isMatch = (payload: unknown): payload is { id: string } =>
-      typeof payload === 'object' &&
-      payload !== null &&
-      'id' in payload &&
-      (payload as { id: unknown }).id === streamId;
+    const isMatch = (payload: unknown): boolean => {
+      const id = streamIdRef.current;
+      if (!id) return false;
+      return (
+        typeof payload === 'object' &&
+        payload !== null &&
+        'id' in payload &&
+        (payload as { id: unknown }).id === id
+      );
+    };
 
     const onToken = (_e: unknown, payload: unknown) => {
       if (!isMatch(payload)) return;
@@ -72,7 +101,7 @@ export function useStream(streamId: string | null): StreamState {
       offErr?.();
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
     };
-  }, [streamId]);
+  }, []);
 
-  return state;
+  return { ...state, setStreamId };
 }

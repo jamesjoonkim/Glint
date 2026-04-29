@@ -16,12 +16,25 @@ function getStreamIdFromUrl(): string | null {
 }
 
 export function ResponseWindow(): JSX.Element {
-  const [streamId, setStreamId] = useState<string | null>(getStreamIdFromUrl());
+  const initialStreamId = getStreamIdFromUrl();
+  const [streamId, setStreamIdState] = useState<string | null>(initialStreamId);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [capture, setCapture] = useState<ReplayCapture | undefined>(undefined);
-  const stream = useStream(streamId);
+  const stream = useStream(initialStreamId);
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * The stream-id ref inside useStream MUST be updated synchronously from
+   * the response:set-stream IPC handler — otherwise tokens that fire on the
+   * same renderer tick land before React commits the state change, and the
+   * filter inside useStream's listeners drops them. setStreamId() does both:
+   * mutates the ref AND schedules a React update so dependent UI re-renders.
+   */
+  const setStreamId = (id: string | null) => {
+    stream.setStreamId(id);
+    setStreamIdState(id);
+  };
 
   const refreshTurns = (id: string) => {
     void (async () => {
