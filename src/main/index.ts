@@ -3,6 +3,9 @@ import path from 'node:path';
 import { createLogger } from '../core/logger/index.js';
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
 import { closeOverlay, openOverlay } from './windows/overlay.js';
+import { captureBBox } from './capture.js';
+import { ensureScreenRecording } from './permissions.js';
+import type { CaptureBBox } from '../shared/types.js';
 
 const log = createLogger('main');
 
@@ -38,11 +41,24 @@ function createMainWindow(): BrowserWindow {
 
 function wireIpc(): void {
   ipcMain.handle('ping', () => 'pong' as const);
+
   ipcMain.handle('capture:cancel', () => {
     closeOverlay();
     return { ok: true } as const;
   });
-  // capture:request lands in P1 Day 4 (capture.ts)
+
+  ipcMain.handle('capture:request', async (_e, bbox: CaptureBBox) => {
+    closeOverlay(); // dismiss before capturing so it isn't in the frame
+    try {
+      const record = await captureBBox(bbox);
+      log.info({ id: record.id }, 'capture complete');
+      // OCR + router + model dispatch wired in P1 D5+D6+D7
+      return { ok: true, id: record.id, pngPath: record.pngPath };
+    } catch (err) {
+      log.error({ err: String(err) }, 'capture failed');
+      return { ok: false, error: String(err) };
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -51,7 +67,11 @@ app.whenReady().then(() => {
   createMainWindow();
 
   registerHotkeys(DEFAULT_BINDINGS, {
-    onCapture: () => openOverlay(),
+    onCapture: async () => {
+      const { granted } = await ensureScreenRecording();
+      if (!granted) return;
+      openOverlay();
+    },
     onHistory: () => log.info('history hotkey (P3)'),
     onSettings: () => log.info('settings hotkey (P5)'),
   });
