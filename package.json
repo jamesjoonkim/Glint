@@ -25,7 +25,7 @@
     "models": {
       "text": "mlx-community/Qwen2.5-7B-Instruct-4bit",
       "vision": "mlx-community/Qwen2-VL-7B-Instruct-4bit",
-      "embed": "mlx-community/bge-small-en-v1.5-mlx"
+      "embed": "mlx-community/bge-small-en-v1.5-bf16"
     }
   },
   "dependencies": {
