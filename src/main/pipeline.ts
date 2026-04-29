@@ -183,6 +183,10 @@ export async function runPipeline(
   capture: CaptureRecord,
   streamId: string,
   deps: PipelineDeps = DEFAULT_DEPS,
+  /** When set, attach the capture row to this existing thread instead of
+   *  minting a new one. Used by the in-chat `+` button via
+   *  capture:openForThread → capture:request. */
+  intoThreadId: string | null = null,
 ): Promise<void> {
   const win = () => getResponseWindow();
   const send = (channel: string, payload: unknown) => {
@@ -200,11 +204,13 @@ export async function runPipeline(
     });
 
     log.info(
-      { id: capture.id, route: decision.route, density: decision.density.toFixed(3), reason: decision.reason },
+      { id: capture.id, route: decision.route, density: decision.density.toFixed(3), reason: decision.reason, intoThreadId },
       'router decision',
     );
 
-    // Persist capture + new thread + first user turn ("OCR preface").
+    // Persist capture (and a new thread if intoThreadId is null).
+    // createCaptureWithThread skips the thread INSERT when threadId is
+    // passed, so the same call covers both flows.
     let dbCaptureId: string | null = null;
     let dbThreadId: string | null = null;
     try {
@@ -214,6 +220,7 @@ export async function runPipeline(
         ocrConfidence: ocr.confidence,
         textDensity: decision.density,
         route: decision.route,
+        threadId: intoThreadId ?? undefined,
       });
       dbCaptureId = row.id;
       dbThreadId = thread.id;

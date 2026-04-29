@@ -35,6 +35,7 @@ import {
   closeStore,
   createThread,
   getTurns,
+  listChatThreads,
   listRecent,
   openStore,
   searchKeyword,
@@ -48,6 +49,15 @@ const log = createLogger('main');
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 
 let mainWindow: BrowserWindow | null = null;
+
+/**
+ * When set, the next capture:request will attach the resulting capture row
+ * to this existing thread instead of creating a new one. Used by the
+ * `+` button inside the response window's chat input via capture:openForThread.
+ * Consumed atomically inside capture:request so a stale value can't leak
+ * into a subsequent ⌘⇧X capture.
+ */
+let pendingCaptureThreadId: string | null = null;
 
 function createMainWindow(): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -102,15 +112,31 @@ function wireIpc(): void {
 
   ipcMain.handle('capture:cancel', () => {
     closeOverlay();
+    pendingCaptureThreadId = null;
     return { ok: true } as const;
+  });
+
+  ipcMain.handle('capture:openForThread', async (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
+    const { granted } = await ensureScreenRecording();
+    if (!granted) return { ok: false, error: 'screen recording denied' };
+    // Stash the target thread; capture:request consumes it on the next call.
+    pendingCaptureThreadId = threadId;
+    openOverlay();
+    return { ok: true };
   });
 
   ipcMain.handle('capture:request', async (_e, bbox: CaptureBBox) => {
     closeOverlay(); // dismiss before capturing so it isn't in the frame
     hideMainWindow(); // dashboard out of frame while answer streams
+    // Consume the pending-thread state ATOMICALLY so a stale value can't
+    // leak into a subsequent fresh ⌘⇧X capture.
+    const intoThreadId = pendingCaptureThreadId;
+    pendingCaptureThreadId = null;
     try {
       const record = await captureBBox(bbox);
-      log.info({ id: record.id }, 'capture complete');
+      log.info({ id: record.id, intoThreadId }, 'capture complete');
       // Defensive: if anything kept the overlay alive across the screenshot
       // (HMR stale handler, alwaysOnTop stickiness), tear it down again now
       // that the capture is in hand. Idempotent — no-op if already gone.
@@ -122,7 +148,7 @@ function wireIpc(): void {
       // shows the reading-the-capture animation until tokens arrive.
       void (async () => {
         await Promise.allSettled([textRuntimePromise, visionRuntimePromise]);
-        return runPipeline(record, streamId, getPipelineDeps());
+        return runPipeline(record, streamId, getPipelineDeps(), intoThreadId);
       })();
       return { ok: true, id: record.id, streamId };
     } catch (err) {
@@ -137,6 +163,29 @@ function wireIpc(): void {
   ipcMain.handle('history:search', (_e, query: unknown) =>
     mapHistory(searchKeyword(typeof query === 'string' ? query : '')),
   );
+
+  ipcMain.handle('history:listChats', () => listChatThreads(200));
+
+  ipcMain.handle('history:openThread', (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
+    hideMainWindow();
+    // Same replay flow as history:open but for capture-less chat threads.
+    // The chat- prefix tells the response window's URL parser this is a
+    // sentinel, not a real stream id, AND distinguishes chat threads from
+    // capture replay in case future logic wants to branch on it.
+    const win = openResponse(`chat-${threadId}`);
+    const fire = () => {
+      win.webContents.send('response:set-thread', { threadId });
+      win.webContents.send('response:replay', { threadId });
+    };
+    if (win.webContents.isLoading()) {
+      win.webContents.once('did-finish-load', fire);
+    } else {
+      fire();
+    }
+    return { ok: true, threadId };
+  });
 
   ipcMain.handle('history:open', (_e, payload: unknown) => {
     const captureId = (payload as { captureId?: unknown })?.captureId;

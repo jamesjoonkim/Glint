@@ -171,7 +171,7 @@ export function ResponseWindow(): JSX.Element {
         )}
       </main>
       <footer className={styles.footer}>
-        <ChatReply disabled={replyDisabled} onSend={handleReply} />
+        <ChatReply disabled={replyDisabled} threadId={threadId} onSend={handleReply} />
       </footer>
     </div>
   );

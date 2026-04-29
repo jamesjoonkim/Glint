@@ -8,6 +8,7 @@ export const IPC = {
     request: 'capture:request',
     cancel: 'capture:cancel',
     result: 'capture:result',
+    openForThread: 'capture:openForThread',
   },
   // model runtime (P1+)
   model: {
@@ -20,6 +21,8 @@ export const IPC = {
     list: 'history:list',
     search: 'history:search',
     open: 'history:open',
+    listChats: 'history:listChats',
+    openThread: 'history:openThread',
   },
   // threads (P4+)
   thread: {

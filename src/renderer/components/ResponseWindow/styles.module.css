@@ -537,12 +537,12 @@
 
 .replyRow {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 6px;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--hairline);
-  border-radius: 999px;
-  padding: 4px 4px 4px 14px;
+  border-radius: 18px;
+  padding: 5px 5px 5px 5px;
   transition: border-color 140ms ease, background 140ms ease;
 }
 .replyRow:focus-within {
@@ -554,6 +554,29 @@
   cursor: not-allowed;
 }
 
+.replyAttach {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.replyAttach:hover:not(:disabled) {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+}
+.replyAttach:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+}
+
 .replyInput {
   flex: 1 1 auto;
   background: transparent;
@@ -561,7 +584,13 @@
   outline: none;
   color: var(--text);
   font: inherit;
-  padding: 6px 0;
+  padding: 6px 4px;
+  /* Textarea-specific — auto-grow up to ~3 lines, scroll past that. */
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.4;
+  min-height: 22px;
+  max-height: calc(1.4em * 3 + 12px);
 }
 .replyInput::placeholder {
   color: var(--text-dim);
