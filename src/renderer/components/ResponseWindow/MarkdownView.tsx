@@ -42,6 +42,7 @@ export function MarkdownView({ source, isStreaming = false }: Props): JSX.Elemen
         parseIncompleteMarkdown={isStreaming}
         remarkPlugins={[[remarkMath, { singleDollarTextMath: true }], remarkGfm]}
         rehypePlugins={[rehypeKatex]}
+        controls={false}
       >
         {cleaned}
       </Streamdown>
