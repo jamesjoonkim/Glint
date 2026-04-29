@@ -14,10 +14,30 @@ import path from 'node:path';
  * that ARE in the bundle, not externalized ones — so we copy here.
  */
 async function shipNativeModules(buildPath: string): Promise<void> {
-  const nativeDeps = ['better-sqlite3', 'bindings', 'file-uri-to-path'];
+  // Modules that must be shipped as files (not inlined) because they load
+  // worker scripts, native bindings, or platform binaries at runtime.
+  const externalDeps = [
+    'better-sqlite3',
+    'bindings',
+    'file-uri-to-path',
+    'tesseract.js',
+    'pino',
+    'pino-pretty',
+    'pino-abstract-transport',
+    'sonic-boom',
+    'thread-stream',
+    'fast-redact',
+    'real-require',
+    'safe-stable-stringify',
+    'split2',
+    'on-exit-leak-free',
+    'process-warning',
+    'atomic-sleep',
+    'jimp',
+  ];
   const dest = path.join(buildPath, 'node_modules');
   await fsExtra.ensureDir(dest);
-  for (const dep of nativeDeps) {
+  for (const dep of externalDeps) {
     const src = path.resolve(__dirname, 'node_modules', dep);
     const target = path.join(dest, dep);
     if (await fsExtra.pathExists(src)) {
@@ -28,11 +48,11 @@ async function shipNativeModules(buildPath: string): Promise<void> {
 
 const config: ForgeConfig = {
   packagerConfig: {
-    // .node bindings can't load from inside an asar archive — unpack them
-    // (plus the wrapping module dirs so the bindings package can locate them).
+    // .node bindings + worker scripts + WASM cores can't load from inside an
+    // asar archive — unpack the whole module dir so resolveSelf works.
     asar: {
       unpack:
-        '**/{*.node,better-sqlite3/**,bindings/**,file-uri-to-path/**}',
+        '**/{*.node,*.wasm,better-sqlite3/**,bindings/**,file-uri-to-path/**,tesseract.js/**,tesseract.js-core/**,pino/**,pino-pretty/**,thread-stream/**,sonic-boom/**,jimp/**}',
     },
     afterCopy: [
       (buildPath, _electronVersion, _platform, _arch, callback) => {

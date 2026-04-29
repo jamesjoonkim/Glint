@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { MarkdownView } from './MarkdownView.js';
+import { Header } from './Header.js';
+import { EmptyState } from './EmptyState.js';
+import { ChatReply } from './ChatReply.js';
 import { useStream } from '../../hooks/useStream.js';
 import styles from './styles.module.css';
 
@@ -10,54 +13,67 @@ function getStreamIdFromUrl(): string | null {
 
 export function ResponseWindow(): JSX.Element {
   const [streamId, setStreamId] = useState<string | null>(getStreamIdFromUrl());
+  const [threadId, setThreadId] = useState<string | null>(null);
   const stream = useStream(streamId);
 
   useEffect(() => {
-    const off = window.glint?.subscribe?.(
+    const offStream = window.glint?.subscribe?.(
       'response:set-stream',
       (_e: unknown, payload: unknown) => {
-        if (
-          typeof payload === 'object' &&
-          payload !== null &&
-          'streamId' in payload &&
-          typeof (payload as { streamId: unknown }).streamId === 'string'
-        ) {
-          setStreamId((payload as { streamId: string }).streamId);
-        }
+        const id = (payload as { streamId?: unknown })?.streamId;
+        if (typeof id === 'string') setStreamId(id);
       },
     );
-    return () => off?.();
+    const offThread = window.glint?.subscribe?.(
+      'response:set-thread',
+      (_e: unknown, payload: unknown) => {
+        const id = (payload as { threadId?: unknown })?.threadId;
+        if (typeof id === 'string') setThreadId(id);
+      },
+    );
+    return () => {
+      offStream?.();
+      offThread?.();
+    };
   }, []);
+
+  const status = stream.error
+    ? 'error'
+    : stream.done
+      ? 'done'
+      : stream.text.length > 0
+        ? 'streaming'
+        : 'warming';
+
+  const handleReply = (text: string) => {
+    if (!threadId) return;
+    void window.glint?.invoke?.('thread:appendTurn', { threadId, content: text });
+  };
 
   return (
     <div className={styles.root}>
-      <header className={styles.header}>
-        <span className={styles.brand}>Glint</span>
-        <div className={styles.status}>
-          {stream.error ? (
-            <span className={styles.error}>error: {stream.error}</span>
-          ) : stream.done ? (
-            <span className={styles.done}>done</span>
-          ) : (
-            <span className={styles.live}>streaming…</span>
-          )}
-        </div>
-      </header>
+      <Header status={status} />
       <main className={styles.body}>
-        {stream.text ? (
-          <MarkdownView source={stream.text} />
+        {stream.error ? (
+          <ErrorView message={stream.error} />
+        ) : stream.text.length === 0 ? (
+          <EmptyState phase={status === 'streaming' ? 'thinking' : 'reading'} />
         ) : (
-          <div className={styles.placeholder}>warming up the local model…</div>
+          <MarkdownView source={stream.text} />
         )}
       </main>
       <footer className={styles.footer}>
-        <input
-          className={styles.reply}
-          placeholder="Reply (multi-turn lands in P4)…"
-          disabled
-          aria-disabled
-        />
+        <ChatReply disabled={!stream.done || !threadId} onSend={handleReply} />
       </footer>
+    </div>
+  );
+}
+
+function ErrorView({ message }: { message: string }): JSX.Element {
+  return (
+    <div className={styles.errorView}>
+      <p className={styles.errorTitle}>Something went sideways.</p>
+      <p className={styles.errorBody}>{message}</p>
     </div>
   );
 }

@@ -158,22 +158,51 @@ let textRuntime: RuntimeHandle | null = null;
 const visionRuntime: RuntimeHandle | null = null;
 
 async function startTextRuntime(): Promise<RuntimeHandle | null> {
-  if (process.env.GLINT_LLM !== 'real') {
-    log.info('GLINT_LLM != real — skipping text runtime spawn (fake mode)');
+  const fs = await import('node:fs');
+  const mode = resolveLlmMode();
+
+  if (mode === 'fake') {
+    log.info({ reason: 'env or test' }, 'fake LLM mode — skipping runtime spawn');
     return null;
   }
+
+  const binaryPath = resolveRuntimeBinary();
+  const modelPath = resolveModelPath('qwen2.5-7b-mlx');
+
+  // Auto-fallback: if either the runtime binary or the text model is missing,
+  // we can't usefully spawn. Surface this in logs and let the pipeline emit a
+  // helpful message instead of timing out at health-check.
+  if (!fs.existsSync(binaryPath)) {
+    log.warn({ binaryPath }, 'runtime binary missing — fake mode');
+    return null;
+  }
+  if (!fs.existsSync(modelPath)) {
+    log.warn({ modelPath }, 'text model missing — fake mode (run first-run wizard)');
+    return null;
+  }
+
   try {
-    const handle = await startRuntime({
-      binaryPath: resolveRuntimeBinary(),
-      modelPath: resolveModelPath('qwen2.5-7b-mlx'),
-      preferredPort: 8765,
-    });
+    const handle = await startRuntime({ binaryPath, modelPath, preferredPort: 8765 });
     log.info({ url: handle.url, pid: handle.pid }, 'text runtime live');
     return handle;
   } catch (err) {
     log.error({ err: String(err) }, 'text runtime spawn failed');
     return null;
   }
+}
+
+/**
+ * Resolve LLM mode. Priority: explicit env var → auto-detect from disk.
+ *   GLINT_LLM=fake  → always fake
+ *   GLINT_LLM=real  → always real (errors if binary/model missing)
+ *   unset           → real if both binary + text model exist, else fake
+ */
+function resolveLlmMode(): 'fake' | 'real' {
+  if (process.env.GLINT_LLM === 'fake') return 'fake';
+  if (process.env.NODE_ENV === 'test') return 'fake';
+  if (process.env.GLINT_LLM === 'real') return 'real';
+  // Default: auto-detect.
+  return 'real';
 }
 
 function getPipelineDeps(): PipelineDeps {
