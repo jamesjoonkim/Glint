@@ -34,7 +34,6 @@ import type { CaptureBBox } from '../shared/types.js';
 const log = createLogger('main');
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
-declare const MAIN_WINDOW_VITE_NAME: string;
 
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -44,7 +43,7 @@ function createMainWindow(): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     backgroundColor: '#0f172a',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/api.js'),
+      preload: path.join(__dirname, 'api.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -54,9 +53,7 @@ function createMainWindow(): BrowserWindow {
   if (typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined') {
     void win.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
-    void win.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    );
+    void win.loadFile(rendererIndex());
   }
 
   win.once('ready-to-show', () => win.show());
@@ -107,6 +104,13 @@ function mapHistory(rows: CaptureRow[]) {
     tags: r.tags ? (JSON.parse(r.tags) as string[]) : [],
     threadId: r.thread_id,
   }));
+}
+
+function rendererIndex(): string {
+  // Forge's plugin-vite emits the production renderer to .vite/renderer/index.html
+  // (no per-window subdir despite forge.config.ts naming it 'main_window').
+  // __dirname in the bundled main is .vite/build, so step up + over.
+  return path.join(__dirname, '..', 'renderer', 'index.html');
 }
 
 function resolvePromptsDir(): string {

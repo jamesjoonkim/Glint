@@ -5,7 +5,6 @@ import { createLogger } from '../../core/logger/index.js';
 const log = createLogger('window:response');
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
-declare const MAIN_WINDOW_VITE_NAME: string;
 
 let response: BrowserWindow | null = null;
 
@@ -29,7 +28,7 @@ export function openResponse(streamId: string): BrowserWindow {
     backgroundColor: '#0f172a',
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/api.js'),
+      preload: path.join(__dirname, 'api.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -39,10 +38,7 @@ export function openResponse(streamId: string): BrowserWindow {
   const url =
     typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined'
       ? `${MAIN_WINDOW_VITE_DEV_SERVER_URL}?view=response&streamId=${streamId}`
-      : `file://${path.join(
-          __dirname,
-          `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`,
-        )}?view=response&streamId=${streamId}`;
+      : `file://${path.join(__dirname, '..', 'renderer', 'index.html')}?view=response&streamId=${streamId}`;
 
   void response.loadURL(url);
   response.once('ready-to-show', () => response?.show());

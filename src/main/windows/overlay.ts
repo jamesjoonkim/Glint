@@ -5,7 +5,6 @@ import { createLogger } from '../../core/logger/index.js';
 const log = createLogger('window:overlay');
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
-declare const MAIN_WINDOW_VITE_NAME: string;
 
 let overlay: BrowserWindow | null = null;
 
@@ -37,7 +36,7 @@ export function openOverlay(): BrowserWindow {
     hasShadow: false,
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: path.join(__dirname, '../preload/api.js'),
+      preload: path.join(__dirname, 'api.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -50,10 +49,7 @@ export function openOverlay(): BrowserWindow {
   const url =
     typeof MAIN_WINDOW_VITE_DEV_SERVER_URL !== 'undefined'
       ? `${MAIN_WINDOW_VITE_DEV_SERVER_URL}?view=overlay`
-      : `file://${path.join(
-          __dirname,
-          `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`,
-        )}?view=overlay`;
+      : `file://${path.join(__dirname, '..', 'renderer', 'index.html')}?view=overlay`;
 
   void overlay.loadURL(url);
 
