@@ -1,6 +1,14 @@
 import styles from './styles.module.css';
 
-export function EmptyState({ phase }: { phase: 'reading' | 'thinking' }): JSX.Element {
+type Phase = 'reading' | 'thinking' | 'idle';
+
+const LABEL: Record<Phase, string> = {
+  reading: 'reading the capture',
+  thinking: 'thinking',
+  idle: 'ask anything',
+};
+
+export function EmptyState({ phase }: { phase: Phase }): JSX.Element {
   return (
     <div className={styles.empty} role="status" aria-live="polite">
       <div className={styles.scanFrame}>
@@ -8,11 +16,9 @@ export function EmptyState({ phase }: { phase: 'reading' | 'thinking' }): JSX.El
         <span className={`${styles.corner} ${styles.cornerTR}`} />
         <span className={`${styles.corner} ${styles.cornerBL}`} />
         <span className={`${styles.corner} ${styles.cornerBR}`} />
-        <span className={styles.scanBeam} />
+        {phase !== 'idle' && <span className={styles.scanBeam} />}
       </div>
-      <p className={styles.emptyLabel}>
-        {phase === 'reading' ? 'reading the capture' : 'thinking'}
-      </p>
+      <p className={styles.emptyLabel}>{LABEL[phase]}</p>
       <p className={styles.emptyHint}>
         Local model. No data leaves your Mac.
       </p>

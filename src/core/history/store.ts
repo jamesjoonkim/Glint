@@ -136,6 +136,24 @@ export function createCaptureWithThread(input: CreateCaptureInput): {
   return { capture, thread };
 }
 
+/**
+ * Create a thread with no capture attached. Used by the ⌘⇧Z chat hotkey
+ * when the user wants to talk to the local model directly, without first
+ * grabbing a screenshot. continueThread() handles the no-capture case by
+ * skipping the OCR-preface user turn and using the chat-text system prompt.
+ */
+export function createThread(title: string | null = null): ThreadRow {
+  const d = getDb();
+  const id = randomUUID();
+  const now = Date.now();
+  d.prepare(
+    `INSERT INTO threads(id, created_at, title, pinned) VALUES (?, ?, ?, 0)`,
+  ).run(id, now, title);
+  return d
+    .prepare<unknown[], ThreadRow>(`SELECT * FROM threads WHERE id = ?`)
+    .get(id) as ThreadRow;
+}
+
 export function appendTurn(
   threadId: string,
   role: 'user' | 'assistant',

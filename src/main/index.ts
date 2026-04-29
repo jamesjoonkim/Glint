@@ -33,6 +33,7 @@ import { destroyWorker } from '../core/ocr/tesseract.js';
 import { startRuntime, type RuntimeHandle } from '../core/models/runtime.js';
 import {
   closeStore,
+  createThread,
   getTurns,
   listRecent,
   openStore,
@@ -180,6 +181,26 @@ function wireIpc(): void {
         tags: head.tags ? (JSON.parse(head.tags) as string[]) : [],
       },
     };
+  });
+
+  ipcMain.handle('chat:start', () => {
+    // Capture-less thread for direct chat. Reuses the response window;
+    // the renderer treats `chat-${threadId}` as a non-streaming sentinel
+    // (same shape as `replay-${threadId}`) so no token subscription opens
+    // until the user actually sends a message.
+    const thread = createThread();
+    hideMainWindow();
+    const win = openResponse(`chat-${thread.id}`);
+    const fire = () => {
+      win.webContents.send('response:set-thread', { threadId: thread.id });
+      win.webContents.send('response:replay', { threadId: thread.id });
+    };
+    if (win.webContents.isLoading()) {
+      win.webContents.once('did-finish-load', fire);
+    } else {
+      fire();
+    }
+    return { ok: true, threadId: thread.id };
   });
 
   ipcMain.handle('thread:appendTurn', async (_e, payload: unknown) => {
@@ -397,6 +418,21 @@ app.whenReady().then(async () => {
       const { granted } = await ensureScreenRecording();
       if (!granted) return;
       openOverlay();
+    },
+    onChat: () => {
+      // Direct chat: no overlay, no capture. Mint a thread, open response.
+      const thread = createThread();
+      hideMainWindow();
+      const win = openResponse(`chat-${thread.id}`);
+      const fire = () => {
+        win.webContents.send('response:set-thread', { threadId: thread.id });
+        win.webContents.send('response:replay', { threadId: thread.id });
+      };
+      if (win.webContents.isLoading()) {
+        win.webContents.once('did-finish-load', fire);
+      } else {
+        fire();
+      }
     },
     onHistory: () => openHistory(),
     onSettings: () => log.info('settings hotkey (P5)'),

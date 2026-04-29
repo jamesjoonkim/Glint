@@ -28,6 +28,10 @@ export const IPC = {
     appendTurn: 'thread:appendTurn',
     getTurns: 'thread:getTurns',
   },
+  // direct-chat (no capture)
+  chat: {
+    start: 'chat:start',
+  },
   // settings (P5)
   settings: {
     open: 'settings:open',

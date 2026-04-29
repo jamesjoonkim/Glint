@@ -118,15 +118,17 @@ export async function continueThread(
 
 /**
  * Build the message array for a text-route follow-up. The original screenshot's
- * OCR transcription stands in for visual context — fine when the capture is
- * dense text and the OCR is reliable.
+ * OCR transcription stands in for visual context when present. When the thread
+ * was started via ⌘⇧Z (direct chat, no capture), we swap in the chat-only
+ * system prompt so the model doesn't reference a non-existent screenshot.
  */
 export async function buildTextFollowupRequest(
   capture: { ocr_text: string | null } | null,
   turns: Array<{ role: 'user' | 'assistant'; content: string }>,
   deps: PipelineDeps,
 ): Promise<{ cfg: ClientConfig; model: string; messages: Message[] }> {
-  const systemPrompt = await loadPrompt('answer-text');
+  const isChatOnly = !capture;
+  const systemPrompt = await loadPrompt(isChatOnly ? 'answer-chat' : 'answer-text');
   const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
   const messages: Message[] = [{ role: 'system', content: systemPrompt }];
   if (capture?.ocr_text) {

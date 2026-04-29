@@ -82,11 +82,7 @@ export function SelectionOverlay(): JSX.Element {
             width: rect.width,
             height: rect.height,
           }}
-        >
-          <div className={styles.dim}>
-            {rect.width} × {rect.height}
-          </div>
-        </div>
+        />
       )}
     </div>
   );

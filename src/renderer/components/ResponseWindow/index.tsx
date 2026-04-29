@@ -9,8 +9,9 @@ import styles from './styles.module.css';
 function getStreamIdFromUrl(): string | null {
   const params = new URLSearchParams(window.location.search);
   const id = params.get('streamId');
-  // Replay sentinels start with 'replay-'; not real stream ids.
-  if (!id || id.startsWith('replay-')) return null;
+  // Sentinels (`replay-…` for history, `chat-…` for direct chat) are not
+  // real stream ids — the renderer should not subscribe to token events.
+  if (!id || id.startsWith('replay-') || id.startsWith('chat-')) return null;
   return id;
 }
 
@@ -151,7 +152,7 @@ export function ResponseWindow(): JSX.Element {
         {stream.error ? (
           <ErrorView message={stream.error} />
         ) : turns.length === 0 && !liveStreaming && !capture ? (
-          <EmptyState phase="reading" />
+          <EmptyState phase={streamId ? 'reading' : 'idle'} />
         ) : (
           <TurnList turns={turns} capture={capture} streaming={liveStreaming} />
         )}

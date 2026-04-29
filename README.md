@@ -28,6 +28,7 @@ Capture any region of any monitor with a global hotkey. Glint OCRs the image, ro
 | Hotkey | Action |
 |--------|--------|
 | `⌘⇧X` | Drag-select any region → AI answer streams into a floating window |
+| `⌘⇧Z` | Open a direct chat with the local model — no screenshot |
 | `⌘⇧H` | Open the searchable history archive |
 | `⌘,` | Settings |
 
