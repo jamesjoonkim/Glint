@@ -1,0 +1,19 @@
+# GitHub Linguist overrides — keep the language bar honest.
+# https://github.com/github-linguist/linguist/blob/main/docs/overrides.md
+
+# Planning docs and design diagrams are documentation, not application code.
+docs/**                          linguist-documentation
+
+# The hero is a stylized mockup, not vendored code.
+resources/screenshots/**         linguist-vendored
+
+# App icons.
+resources/icon.svg               linguist-generated
+resources/icon.iconset/**        linguist-generated
+
+# Generated diagnostics + reports should never count, even if accidentally committed.
+.diag/**                         linguist-generated
+playwright-report/**             linguist-generated
+
+# Lockfile.
+package-lock.json                linguist-generated
