@@ -8,8 +8,9 @@ import { openHistory } from './windows/history.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
-import { runPipeline, startStream } from './pipeline.js';
+import { runPipeline, startStream, type PipelineDeps } from './pipeline.js';
 import { destroyWorker } from '../core/ocr/tesseract.js';
+import { startRuntime, type RuntimeHandle } from '../core/models/runtime.js';
 import {
   closeStore,
   listRecent,
@@ -66,7 +67,7 @@ function wireIpc(): void {
       const record = await captureBBox(bbox);
       log.info({ id: record.id }, 'capture complete');
       const streamId = startStream();
-      void runPipeline(record, streamId);
+      void runPipeline(record, streamId, getPipelineDeps());
       return { ok: true, id: record.id, streamId };
     } catch (err) {
       log.error({ err: String(err) }, 'capture failed');
@@ -118,6 +119,58 @@ function resolveDbPath(): string {
   );
 }
 
+function resolveRuntimeBinary(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'runtime', 'glint-mlx-server');
+  }
+  return path.join(app.getAppPath(), 'resources', 'runtime', 'glint-mlx-server');
+}
+
+function resolveModelPath(name: string): string {
+  return path.join(
+    os.homedir(),
+    'Library',
+    'Application Support',
+    'Glint',
+    'models',
+    name,
+  );
+}
+
+// eslint-disable-next-line prefer-const
+let textRuntime: RuntimeHandle | null = null;
+// vision runtime spawn lands when the wizard installs the model; declared now
+// for tear-down + dep wiring.
+const visionRuntime: RuntimeHandle | null = null;
+
+async function startTextRuntime(): Promise<RuntimeHandle | null> {
+  if (process.env.GLINT_LLM !== 'real') {
+    log.info('GLINT_LLM != real — skipping text runtime spawn (fake mode)');
+    return null;
+  }
+  try {
+    const handle = await startRuntime({
+      binaryPath: resolveRuntimeBinary(),
+      modelPath: resolveModelPath('qwen2.5-7b-mlx'),
+      preferredPort: 8765,
+    });
+    log.info({ url: handle.url, pid: handle.pid }, 'text runtime live');
+    return handle;
+  } catch (err) {
+    log.error({ err: String(err) }, 'text runtime spawn failed');
+    return null;
+  }
+}
+
+function getPipelineDeps(): PipelineDeps {
+  return {
+    textUrl: textRuntime?.url ?? null,
+    visionUrl: visionRuntime?.url ?? null,
+    textModel: 'default_model',
+    visionModel: 'default_model',
+  };
+}
+
 app.whenReady().then(async () => {
   log.info('app ready');
   setPromptsDir(resolvePromptsDir());
@@ -125,6 +178,8 @@ app.whenReady().then(async () => {
   await openStore(resolveDbPath()).catch((err) =>
     log.error({ err: String(err) }, 'store open failed'),
   );
+  // Start text runtime in background — UI can render before model is ready.
+  void startTextRuntime().then((h) => (textRuntime = h));
   wireIpc();
   createMainWindow();
 
@@ -154,6 +209,12 @@ app.on('will-quit', () => {
 
 app.on('before-quit', async () => {
   log.info('before-quit; tearing down workers');
-  await destroyWorker().catch((err) => log.warn({ err: String(err) }, 'ocr teardown'));
+  await Promise.allSettled([
+    destroyWorker().catch((err) => log.warn({ err: String(err) }, 'ocr teardown')),
+    textRuntime?.stop().catch((err: unknown) => log.warn({ err: String(err) }, 'text runtime stop')),
+    (visionRuntime as RuntimeHandle | null)?.stop().catch((err: unknown) =>
+      log.warn({ err: String(err) }, 'vision runtime stop'),
+    ),
+  ]);
   closeStore();
 });
