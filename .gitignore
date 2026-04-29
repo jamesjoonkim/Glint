@@ -11,6 +11,13 @@ dist/
 # bundled runtime (downloaded/built locally)
 resources/runtime/
 
+# PyInstaller intermediates + venv (build/python/build-runtime.sh artifacts)
+build/python/.venv/
+build/python/build/
+build/python/dist/
+*.pyc
+__pycache__/
+
 # user data (created at runtime, never committed)
 glint.db
 captures/

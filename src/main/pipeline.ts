@@ -34,8 +34,13 @@ export type PipelineDeps = {
   visionModel: string;
 };
 
-const TEXT_MODEL_DEFAULT = 'mlx-community/Qwen2.5-7B-Instruct-4bit';
-const VISION_MODEL_DEFAULT = 'mlx-community/Qwen2-VL-7B-Instruct-4bit';
+// mlx_lm.server uses 'default_model' to refer to whatever was passed via
+// --model on the CLI. Each runtime process serves exactly one model, and we
+// run separate processes for text + vision (different ports). The HF repo id
+// stays in package.json#glint.models as the human-readable identifier; this
+// constant is the wire-protocol value sent to the server.
+const TEXT_MODEL_DEFAULT = 'default_model';
+const VISION_MODEL_DEFAULT = 'default_model';
 
 const DEFAULT_DEPS: PipelineDeps = {
   textUrl: null,

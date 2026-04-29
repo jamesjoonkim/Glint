@@ -9,24 +9,33 @@
 #   dist/glint-mlx-server (single binary, ~200MB after --strip)
 
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
+
+hidden = (
+    collect_submodules('mlx')
+    + collect_submodules('mlx_lm')
+    + collect_submodules('mlx_vlm')
+    + collect_submodules('huggingface_hub')
+    + ['sentencepiece']
+)
+
+datas = (
+    collect_data_files('mlx')
+    + collect_data_files('mlx_lm')
+    + collect_data_files('mlx_vlm')
+)
 
 a = Analysis(
     ['runtime_entry.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[
-        'mlx_lm',
-        'mlx_lm.server',
-        'mlx_vlm',
-        'huggingface_hub',
-        'sentencepiece',
-    ],
+    datas=datas,
+    hiddenimports=hidden,
     hookspath=[],
     runtime_hooks=[],
-    excludes=['matplotlib', 'pandas', 'IPython', 'notebook'],
+    excludes=['matplotlib', 'pandas', 'IPython', 'notebook', 'tkinter'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
