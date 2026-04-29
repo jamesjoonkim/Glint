@@ -143,6 +143,31 @@
   100% { transform: scale(2.2); opacity: 0; }
 }
 
+/* ─── tool banner (web search indicator) ───────────────────── */
+
+.toolBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  background: rgba(99, 142, 255, 0.06);
+  border-bottom: 1px solid rgba(99, 142, 255, 0.18);
+  color: #a8c0ff;
+  font-family: 'SF Mono', Menlo, monospace;
+  text-transform: lowercase;
+  animation: sd-fadeIn 200ms ease;
+}
+.toolBannerQuery {
+  font-style: italic;
+  color: var(--text);
+}
+@keyframes sd-fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ─── body ───────────────────────────────────────────────────── */
 
 .body {

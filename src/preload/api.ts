@@ -11,6 +11,7 @@ const PUSH_CHANNELS = new Set<string>([
   'model:stream:token',
   'model:stream:done',
   'model:stream:error',
+  'model:tool:web-search',
   'response:set-stream',
   'response:set-thread',
   'response:replay',

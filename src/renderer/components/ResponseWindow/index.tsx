@@ -21,6 +21,7 @@ export function ResponseWindow(): JSX.Element {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [capture, setCapture] = useState<ReplayCapture | undefined>(undefined);
+  const [webSearchQuery, setWebSearchQuery] = useState<string | null>(null);
   const stream = useStream(initialStreamId);
   const bodyRef = useRef<HTMLDivElement>(null);
 
@@ -101,10 +102,19 @@ export function ResponseWindow(): JSX.Element {
         refreshCapture(id);
       }
     });
+    const offWebSearch = safeSubscribe('model:tool:web-search', (_e, p) => {
+      const query = (p as { query?: unknown })?.query;
+      if (typeof query === 'string') {
+        setWebSearchQuery(query);
+        // Clear after 4s if the next round of tokens hasn't already cleared.
+        setTimeout(() => setWebSearchQuery((cur) => (cur === query ? null : cur)), 4000);
+      }
+    });
     return () => {
       offStream?.();
       offThread?.();
       offReplay?.();
+      offWebSearch?.();
     };
   }, []);
 
@@ -172,6 +182,16 @@ export function ResponseWindow(): JSX.Element {
   return (
     <div className={styles.root}>
       <Header status={status} />
+      {webSearchQuery && (
+        <div className={styles.toolBanner} role="status" aria-live="polite">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M3 12 H21 M12 3 C15 6 15 18 12 21 C9 18 9 6 12 3" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+          <span>searching the web · </span>
+          <span className={styles.toolBannerQuery}>{webSearchQuery}</span>
+        </div>
+      )}
       <main className={styles.body} ref={bodyRef}>
         {stream.error ? (
           <ErrorView message={stream.error} />

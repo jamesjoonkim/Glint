@@ -26,6 +26,13 @@ import {
 import { makeThumbnail } from '../core/history/thumbnails.js';
 import { classifyTags } from '../core/threads/tags.js';
 import { generateTitle } from '../core/threads/titles.js';
+import { getSettings } from './settings.js';
+import {
+  parseToolCall,
+  tavilySearch,
+  WEB_SEARCH_TOOL_PROMPT,
+  type SearchResult,
+} from './web-search.js';
 
 const log = createLogger('pipeline');
 
@@ -103,12 +110,6 @@ export async function continueThread(
     log.warn({ err: String(err) }, 'append user turn failed');
   }
 
-  let answer = '';
-  const onTok = (chunk: string) => {
-    answer += chunk;
-    send('model:stream:token', { id: streamId, chunk });
-  };
-
   try {
     const turns = getTurns(threadId);
     const capture = findCapturesForThread(threadId);
@@ -121,14 +122,20 @@ export async function continueThread(
       ? await buildVisionFollowupRequest(capture!, turns, deps)
       : await buildTextFollowupRequest(capture, turns, deps);
 
-    const stream = streamCompletion(cfg, { model, messages }, controller.signal);
-    for await (const tok of stream) onTok(tok);
+    // Tool-call loop: stream once, look for <tool_call>, optionally execute
+    // and re-stream with the tool result appended. Capped at maxIterations
+    // (default 2) to prevent runaway loops.
+    const finalAnswer = await streamWithToolLoop({
+      cfg,
+      model,
+      messages,
+      streamId,
+      controller,
+      send,
+    });
 
-    // Append whatever we got — even partial answers from a cancelled stream
-    // belong in history. Tag with `[stopped]` suffix when interrupted so the
-    // user can see at a glance which turns are full vs cut short.
     const aborted = controller.signal.aborted;
-    const final = aborted && answer ? `${answer}\n\n_[stopped]_` : answer;
+    const final = aborted && finalAnswer ? `${finalAnswer}\n\n_[stopped]_` : finalAnswer;
     if (final) {
       appendTurn(threadId, 'assistant', final, useVision ? deps.visionModel : deps.textModel);
     }
@@ -198,6 +205,170 @@ export async function buildVisionFollowupRequest(
 function findCapturesForThread(threadId: string) {
   // Most-recent capture for a thread (one per thread until v2.1).
   return listRecent(500).find((c) => c.thread_id === threadId) ?? null;
+}
+
+/**
+ * Stream a completion. Detect `<tool_call>` in the response. If found AND
+ * web search is enabled in settings, execute the tool and re-prompt with
+ * the result. Repeat until the model returns a normal answer or we hit
+ * maxIterations (settings, default 2).
+ *
+ * The first tokens are buffered while we decide whether the response is a
+ * tool call: if `<tool_call>` appears within the first N chars, we suppress
+ * emission; otherwise we flush and continue streaming normally.
+ */
+async function streamWithToolLoop(args: {
+  cfg: ClientConfig;
+  model: string;
+  messages: Message[];
+  streamId: string;
+  controller: AbortController;
+  send: (channel: string, payload: unknown) => void;
+}): Promise<string> {
+  const settings = getSettings();
+  const webSearchOn =
+    settings.webSearch.enabled && !!settings.webSearch.tavilyApiKey;
+  const maxIterations = Math.max(1, settings.webSearch.maxIterations);
+
+  // System prompt is at index 0; inject the tool prompt as a follow-up
+  // system message when web search is on, so the model knows the format.
+  const messages: Message[] = webSearchOn
+    ? injectToolPrompt(args.messages)
+    : args.messages;
+
+  let lastVisibleAnswer = '';
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    const { answer, suppressed } = await streamWithToolDetection(
+      args.cfg,
+      { model: args.model, messages },
+      args.controller.signal,
+      args.streamId,
+      args.send,
+      webSearchOn,
+    );
+
+    if (args.controller.signal.aborted) return suppressed ? '' : answer;
+
+    if (!suppressed) {
+      // Normal answer — done.
+      return answer;
+    }
+
+    // Tool call detected. Parse + execute.
+    const tc = parseToolCall(answer);
+    if (!tc || tc.name !== 'web_search') {
+      // Could not parse — show the raw answer to the user as a fallback.
+      args.send('model:stream:token', { id: args.streamId, chunk: answer });
+      return answer;
+    }
+    const query = String((tc.arguments as { query?: unknown }).query ?? '').slice(0, 500);
+    if (!query) {
+      args.send('model:stream:token', {
+        id: args.streamId,
+        chunk: '_[web_search tool call had no query]_',
+      });
+      return '';
+    }
+
+    args.send('model:tool:web-search', { id: args.streamId, query });
+    log.info({ query, iteration }, 'web_search tool dispatch');
+
+    let results: SearchResult[];
+    try {
+      results = await tavilySearch(
+        query,
+        settings.webSearch.tavilyApiKey!,
+        5,
+        args.controller.signal,
+      );
+    } catch (err) {
+      log.warn({ err: String(err), query }, 'tavily search failed');
+      const failureNote = `_[web search failed: ${String(err).slice(0, 120)}]_`;
+      args.send('model:stream:token', { id: args.streamId, chunk: failureNote });
+      return failureNote;
+    }
+
+    // Append the model's tool call + the tool response, then re-prompt.
+    messages.push({ role: 'assistant', content: answer });
+    messages.push({
+      role: 'user',
+      content: `<tool_response>\n${JSON.stringify(results, null, 2)}\n</tool_response>`,
+    });
+    lastVisibleAnswer = '';
+  }
+
+  // Hit iteration cap.
+  const note = '\n\n_[hit web_search iteration cap; answering from what we have]_';
+  args.send('model:stream:token', { id: args.streamId, chunk: note });
+  return lastVisibleAnswer + note;
+}
+
+/**
+ * Stream a single completion. Buffer the first ~120 chars to decide whether
+ * this is a tool call (starts with optional whitespace then `<tool_call>`).
+ * If it IS a tool call, suppress emission (the user shouldn't see the raw
+ * tag). Otherwise flush the buffer and stream the rest normally.
+ */
+async function streamWithToolDetection(
+  cfg: ClientConfig,
+  req: { model: string; messages: Message[] },
+  signal: AbortSignal,
+  streamId: string,
+  send: (channel: string, payload: unknown) => void,
+  toolsEnabled: boolean,
+): Promise<{ answer: string; suppressed: boolean }> {
+  const stream = streamCompletion(cfg, req, signal);
+  let answer = '';
+  let buffer = '';
+  let decided = false;
+  let suppressed = false;
+
+  for await (const tok of stream) {
+    answer += tok;
+
+    if (toolsEnabled && !decided) {
+      buffer += tok;
+      // Decide once we've seen enough to know.
+      if (buffer.length >= 120 || buffer.includes('>')) {
+        const trimmed = buffer.trimStart();
+        if (trimmed.startsWith('<tool_call>')) {
+          suppressed = true;
+        } else {
+          // Not a tool call — flush what we've buffered.
+          send('model:stream:token', { id: streamId, chunk: buffer });
+        }
+        decided = true;
+      }
+      continue;
+    }
+
+    if (suppressed) continue; // keep accumulating into `answer`, don't emit
+
+    if (decided) {
+      send('model:stream:token', { id: streamId, chunk: tok });
+    }
+  }
+
+  // If stream ended before we decided (very short response), flush remainder.
+  if (!decided && !suppressed && buffer) {
+    send('model:stream:token', { id: streamId, chunk: buffer });
+  }
+
+  return { answer, suppressed };
+}
+
+function injectToolPrompt(messages: Message[]): Message[] {
+  // Concatenate the tool prompt onto the first system message so we don't
+  // emit two consecutive system roles (some chat-template implementations
+  // collapse those, others duplicate them — concatenation sidesteps both).
+  let injected = false;
+  return messages.map((m) => {
+    if (!injected && m.role === 'system' && typeof m.content === 'string') {
+      injected = true;
+      return { role: 'system', content: `${m.content}\n\n${WEB_SEARCH_TOOL_PROMPT}` };
+    }
+    return m;
+  });
 }
 
 /**

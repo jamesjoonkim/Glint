@@ -47,6 +47,7 @@ import {
   type CaptureRow,
 } from '../core/history/store.js';
 import { setMigrationsDir } from '../core/history/migrations.js';
+import { loadSettings, setSettingsPath } from './settings.js';
 import type { CaptureBBox } from '../shared/types.js';
 
 const log = createLogger('main');
@@ -75,7 +76,7 @@ function createMainWindow(): BrowserWindow {
     height: 720,
     show: false,
     titleBarStyle: 'hiddenInset',
-    backgroundColor: '#0f172a',
+    backgroundColor: '#0a0b0f',
     webPreferences: {
       preload: path.join(__dirname, 'api.js'),
       contextIsolation: true,
@@ -586,6 +587,8 @@ app.whenReady().then(async () => {
   log.info('app ready');
   setPromptsDir(resolvePromptsDir());
   setMigrationsDir(resolveMigrationsDir());
+  setSettingsPath(path.join(os.homedir(), 'Library', 'Application Support', 'Glint', 'settings.json'));
+  await loadSettings();
   await openStore(resolveDbPath(), {
     nativeBinding: resolveBetterSqliteBinding(),
   }).catch((err) =>

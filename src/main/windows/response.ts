@@ -52,7 +52,14 @@ export function openResponse(streamId: string): BrowserWindow {
       : `file://${path.join(__dirname, '..', 'renderer', 'index.html')}?view=response&streamId=${streamId}`;
 
   void response.loadURL(url);
-  response.once('ready-to-show', () => response?.show());
+  response.once('ready-to-show', () => {
+    if (!response) return;
+    response.show();
+    // Without an explicit focus call, macOS sometimes opens the window in
+    // background depending on which app last had keyboard focus. .focus()
+    // makes ⌘⇧Z reliably land in a typeable state.
+    response.focus();
+  });
   response.on('closed', () => {
     response = null;
     for (const fn of closeListeners) {
