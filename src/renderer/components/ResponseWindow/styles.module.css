@@ -538,11 +538,11 @@
 .replyRow {
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--hairline);
   border-radius: 18px;
-  padding: 5px 5px 5px 5px;
+  padding: 3px;
   transition: border-color 140ms ease, background 140ms ease;
 }
 .replyRow:focus-within {
@@ -584,13 +584,19 @@
   outline: none;
   color: var(--text);
   font: inherit;
-  padding: 6px 4px;
-  /* Textarea-specific — auto-grow up to ~3 lines, scroll past that. */
+  /* Textarea-specific — auto-grow up to ~3 lines, scroll past that. The
+     vertical padding here is tuned so a single-line textarea matches the
+     30px height of the +/send buttons exactly. */
   resize: none;
   overflow-y: auto;
+  font-size: 14px;
   line-height: 1.4;
-  min-height: 22px;
-  max-height: calc(1.4em * 3 + 12px);
+  padding: 5px 8px;
+  margin: 0;
+  box-sizing: border-box;
+  min-height: 30px;
+  max-height: calc(1.4em * 3 + 10px);
+  display: block;
 }
 .replyInput::placeholder {
   color: var(--text-dim);
