@@ -10,6 +10,16 @@ import {
 } from '../core/models/client.js';
 import type { CaptureRecord } from './capture.js';
 import { openResponse, getResponseWindow } from './windows/response.js';
+import {
+  appendTurn,
+  createCaptureWithThread,
+  setTags,
+  setThreadTitle,
+  setThumbnail,
+} from '../core/history/store.js';
+import { makeThumbnail } from '../core/history/thumbnails.js';
+import { classifyTags } from '../core/threads/tags.js';
+import { generateTitle } from '../core/threads/titles.js';
 
 const log = createLogger('pipeline');
 
@@ -70,10 +80,52 @@ export async function runPipeline(
       'router decision',
     );
 
+    // Persist capture + new thread + first user turn ("OCR preface").
+    let dbCaptureId: string | null = null;
+    let dbThreadId: string | null = null;
+    try {
+      const { capture: row, thread } = createCaptureWithThread({
+        pngPath: capture.pngPath,
+        ocrText: ocr.text,
+        ocrConfidence: ocr.confidence,
+        textDensity: decision.density,
+        route: decision.route,
+      });
+      dbCaptureId = row.id;
+      dbThreadId = thread.id;
+      send('response:set-thread', { threadId: thread.id });
+    } catch (err) {
+      log.error({ err: String(err) }, 'history persist failed');
+    }
+
+    let answer = '';
+    const onTok = (chunk: string) => {
+      answer += chunk;
+      send('model:stream:token', { id: streamId, chunk });
+    };
+
     if (decision.route === 'vision') {
-      await runVisionRoute(capture, streamId, deps, send);
+      await runVisionRoute(capture, streamId, deps, onTok);
     } else {
-      await runTextRoute(capture, ocr, streamId, deps, send);
+      await runTextRoute(capture, ocr, streamId, deps, onTok);
+    }
+    send('model:stream:done', { id: streamId });
+
+    if (dbCaptureId && dbThreadId) {
+      try {
+        appendTurn(dbThreadId, 'assistant', answer, deps.textModel);
+      } catch (err) {
+        log.warn({ err: String(err) }, 'append assistant turn failed');
+      }
+      // Async post-save: thumbnail, tags, title. None block the user.
+      void postSaveBackground({
+        captureId: dbCaptureId,
+        threadId: dbThreadId,
+        pngPath: capture.pngPath,
+        ocrText: ocr.text,
+        answer,
+        deps,
+      });
     }
   } catch (err) {
     log.error({ err: String(err), id: capture.id }, 'pipeline failed');
@@ -81,12 +133,44 @@ export async function runPipeline(
   }
 }
 
+type PostSaveArgs = {
+  captureId: string;
+  threadId: string;
+  pngPath: string;
+  ocrText: string;
+  answer: string;
+  deps: PipelineDeps;
+};
+
+async function postSaveBackground(args: PostSaveArgs): Promise<void> {
+  const cfg: ClientConfig = { baseUrl: args.deps.textUrl ?? 'http://127.0.0.1:8765' };
+
+  await Promise.allSettled([
+    makeThumbnail(args.pngPath)
+      .then((thumb) => setThumbnail(args.captureId, thumb))
+      .catch((err) => log.warn({ err: String(err) }, 'thumbnail failed')),
+
+    classifyTags({ ocrText: args.ocrText, client: cfg, model: args.deps.textModel })
+      .then((tags) => setTags(args.captureId, tags))
+      .catch((err) => log.warn({ err: String(err) }, 'tag classify failed')),
+
+    generateTitle({
+      ocrText: args.ocrText,
+      answerText: args.answer,
+      client: cfg,
+      model: args.deps.textModel,
+    })
+      .then((title) => setThreadTitle(args.threadId, title))
+      .catch((err) => log.warn({ err: String(err) }, 'title gen failed')),
+  ]);
+}
+
 async function runTextRoute(
   capture: CaptureRecord,
   ocr: Awaited<ReturnType<typeof runOcr>>,
-  streamId: string,
+  _streamId: string,
   deps: PipelineDeps,
-  send: (c: string, p: unknown) => void,
+  onTok: (chunk: string) => void,
 ): Promise<void> {
   const systemPrompt = await loadPrompt('answer-text');
   const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
@@ -100,26 +184,20 @@ async function runTextRoute(
       },
     ],
   });
-  for await (const tok of stream) {
-    send('model:stream:token', { id: streamId, chunk: tok });
-  }
-  send('model:stream:done', { id: streamId });
-  void capture; // capture id retained for P3 history wiring
+  for await (const tok of stream) onTok(tok);
+  void capture;
 }
 
 async function runVisionRoute(
   capture: CaptureRecord,
-  streamId: string,
+  _streamId: string,
   deps: PipelineDeps,
-  send: (c: string, p: unknown) => void,
+  onTok: (chunk: string) => void,
 ): Promise<void> {
   if (!deps.visionUrl && process.env.GLINT_LLM !== 'fake') {
-    send('model:stream:token', {
-      id: streamId,
-      chunk:
-        '**Vision model not installed.**\n\nThis capture was routed to the vision path (low text density) but the Qwen2-VL model isn\'t available. Install it from Settings → Models, or rerun the capture on a text-heavy region.',
-    });
-    send('model:stream:done', { id: streamId });
+    onTok(
+      '**Vision model not installed.**\n\nThis capture was routed to the vision path (low text density) but the Qwen2-VL model isn\'t available. Install it from Settings → Models, or rerun the capture on a text-heavy region.',
+    );
     return;
   }
 
@@ -134,8 +212,8 @@ async function runVisionRoute(
     model: deps.visionModel,
     messages: [{ role: 'system', content: systemPrompt }, userMsg],
   });
-  for await (const tok of stream) {
-    send('model:stream:token', { id: streamId, chunk: tok });
-  }
-  send('model:stream:done', { id: streamId });
+  for await (const tok of stream) onTok(tok);
 }
+
+// keep randomUUID import used (avoid unused-warning when scope shifts)
+void randomUUID;
