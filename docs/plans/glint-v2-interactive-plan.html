@@ -1,0 +1,939 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glint v2 — Interactive Plan</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --panel: #ffffff;
+    --panel-2: #f4f4f5;
+    --text: #0f172a;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --success: #16a34a;
+    --success-soft: #dcfce7;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --danger: #dc2626;
+    --danger-soft: #fee2e2;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --code-bg: #0f172a;
+    --code-text: #e2e8f0;
+    --code-dir: #93c5fd;
+    --code-new: #86efac;
+    --code-mod: #fde68a;
+    --code-comment: #64748b;
+    --code-string: #fca5a5;
+    --code-key: #c4b5fd;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -8px rgba(15, 23, 42, 0.08);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header.hero {
+    padding: 64px 32px 40px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  }
+  .hero-inner { max-width: 1100px; margin: 0 auto; }
+  .eyebrow {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
+  h1 { font-size: 40px; line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+  .subtitle { font-size: 18px; color: var(--muted); margin: 0 0 32px; max-width: 720px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; max-width: 800px; }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat-num { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+
+  nav.tabs {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(250, 250, 250, 0.92);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; gap: 4px; padding: 8px 16px;
+    overflow-x: auto;
+  }
+  .tab {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+  .tab:hover { background: var(--panel-2); color: var(--text); }
+  .tab.active {
+    background: var(--text);
+    color: white;
+  }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 16px 80px; }
+  section.tab-panel { display: none; }
+  section.tab-panel.active { display: block; animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  h2 { font-size: 24px; margin: 0 0 16px; letter-spacing: -0.01em; }
+  h3 { font-size: 16px; margin: 24px 0 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+  }
+  .card h4 { margin: 0 0 8px; font-size: 16px; }
+  .card p { margin: 0 0 8px; color: var(--muted); }
+
+  .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+  .grid-days { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+  }
+  .badge-blue { background: var(--accent-soft); color: var(--accent); }
+  .badge-green { background: var(--success-soft); color: var(--success); }
+  .badge-amber { background: var(--warn-soft); color: var(--warn); }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .dot-blue { background: var(--accent); }
+  .dot-green { background: var(--success); }
+  .dot-amber { background: var(--warn); }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 10px;
+    padding: 16px 18px;
+    font-family: "SF Mono", Menlo, Monaco, "Liberation Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+    margin: 12px 0;
+    border: 1px solid #1e293b;
+    white-space: pre-wrap;
+  }
+  pre .dir { color: var(--code-dir); }
+  pre .new { color: var(--code-new); display: block; }
+  pre .mod { color: var(--code-mod); display: block; }
+  pre .comment { color: var(--code-comment); }
+  pre .str { color: var(--code-string); }
+  pre .key { color: var(--code-key); }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 14px; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; background: var(--panel-2); }
+  tr:hover td { background: var(--panel-2); }
+
+  details.decision {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  details.decision summary {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-weight: 600;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  details.decision summary::after {
+    content: "+"; margin-left: auto; color: var(--muted); font-weight: 400; font-size: 18px;
+  }
+  details.decision[open] summary::after { content: "−"; }
+  details.decision .body { padding: 0 18px 18px; color: var(--muted); }
+  details.decision .body strong { color: var(--text); }
+  details.decision .body p { margin: 8px 0; }
+
+  .day-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .day-card:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow); }
+  .day-card.active { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .day-num { font-size: 11px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; }
+  .day-title { font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .day-summary { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  .day-detail {
+    margin-top: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  .day-detail h4 { margin: 0 0 8px; }
+
+  .checklist label {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 14px; border-radius: 8px;
+    cursor: pointer; user-select: none;
+    transition: background 0.1s ease;
+  }
+  .checklist label:hover { background: var(--panel-2); }
+  .checklist input[type=checkbox] {
+    margin-top: 3px; accent-color: var(--accent);
+    width: 16px; height: 16px; cursor: pointer;
+  }
+  .checklist label.checked { color: var(--muted); text-decoration: line-through; }
+
+  .flow-step {
+    display: flex; gap: 16px;
+    padding: 16px 0;
+    border-bottom: 1px dashed var(--border);
+  }
+  .flow-step:last-child { border-bottom: none; }
+  .flow-num {
+    flex: 0 0 32px;
+    width: 32px; height: 32px;
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px;
+  }
+  .flow-num.persona-system { background: var(--success); }
+  .flow-num.persona-user { background: var(--accent); }
+  .flow-num.persona-llm { background: var(--warn); }
+  .flow-content { flex: 1; }
+  .flow-content .who { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .flow-content .what { font-size: 15px; font-weight: 500; margin-top: 2px; }
+  .flow-content .detail { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .duration { font-size: 11px; color: var(--muted); background: var(--panel-2); padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+
+  .reuse-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .reuse-row:last-child { border: none; }
+  .reuse-name { font-weight: 600; font-size: 14px; }
+  .reuse-source { font-family: "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .reuse-purpose { font-size: 13px; color: var(--text); }
+
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin: 16px 0;
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.success { border-color: var(--success); background: var(--success-soft); }
+  .callout strong { display: block; margin-bottom: 4px; }
+
+  img.diagram {
+    max-width: 100%;
+    height: auto;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin: 16px 0;
+  }
+
+  .footer-note {
+    font-size: 12px; color: var(--muted); text-align: center;
+    margin-top: 64px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 600px) {
+    header.hero { padding: 32px 16px 24px; }
+    h1 { font-size: 28px; }
+    .subtitle { font-size: 15px; }
+    .reuse-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">Implementation Plan · 2026-04-28</div>
+    <h1>Glint v2 — Local-First Screenshot Assistant</h1>
+    <p class="subtitle">Hotkey, marquee, AI explanation. All processing on-device. Searchable history with semantic recall. Zero cloud calls after one-time model download.</p>
+    <div class="stats">
+      <div class="stat"><div class="stat-num">19</div><div class="stat-label">Build days</div></div>
+      <div class="stat"><div class="stat-num">6</div><div class="stat-label">Phases</div></div>
+      <div class="stat"><div class="stat-num">~58</div><div class="stat-label">Source files</div></div>
+      <div class="stat"><div class="stat-num">~40</div><div class="stat-label">Test files</div></div>
+      <div class="stat"><div class="stat-num">0</div><div class="stat-label">Cloud deps</div></div>
+      <div class="stat"><div class="stat-num">10/10</div><div class="stat-label">Plan score</div></div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs">
+  <div class="tabs-inner" id="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="userflow">User Flow</button>
+    <button class="tab" data-tab="timeline">Timeline</button>
+    <button class="tab" data-tab="decisions">Decisions</button>
+    <button class="tab" data-tab="datamodel">Data Model</button>
+    <button class="tab" data-tab="reuse">Reuse</button>
+    <button class="tab" data-tab="risks">Risks</button>
+    <button class="tab" data-tab="checklist">Checklist</button>
+    <button class="tab" data-tab="diagrams">Diagrams</button>
+  </div>
+</nav>
+
+<main>
+
+  <section class="tab-panel active" id="overview">
+    <h2>Overview</h2>
+    <p style="color: var(--muted); max-width: 720px;">v1 was a one-night Electron build using GPT-4V via OpenAI cloud. v2 is a ground-up rebuild with a three-layer architecture (Main · Core · Renderer), MLX runtime bundled via PyInstaller, and SQLite + sqlite-vss for fully local searchable history.</p>
+
+    <div class="grid-2">
+      <div class="card">
+        <span class="badge badge-blue">P0</span>
+        <h4 style="margin-top:8px">Bootstrap</h4>
+        <p>Day 1-2. Forge + Vite, three-layer skeleton, lint rules enforcing import boundaries, HMR working.</p>
+      </div>
+      <div class="card">
+        <span class="badge badge-blue">P1</span>
+        <h4 style="margin-top:8px">Capture pipeline (text route)</h4>
+        <p>Day 3-7. Hotkey, marquee, ScreenCaptureKit, tesseract OCR, density classifier, MLX text model, response window with chat reply, markdown sanitization.</p>
+      </div>
+      <div class="card">
+        <span class="badge badge-blue">P2</span>
+        <h4 style="margin-top:8px">Vision route</h4>
+        <p>Day 8-9. Qwen2-VL-7B variant, image upload, two-process MLX runtime, fallback when vision model not installed.</p>
+      </div>
+      <div class="card">
+        <span class="badge badge-blue">P3</span>
+        <h4 style="margin-top:8px">Storage and history</h4>
+        <p>Day 10-13. SQLite + FTS5 + sqlite-vss, hybrid search ranking, history panel with virtual grid + IntersectionObserver thumbnails.</p>
+      </div>
+      <div class="card">
+        <span class="badge badge-blue">P4</span>
+        <h4 style="margin-top:8px">Threads and continuation</h4>
+        <p>Day 14-16. Multi-turn chat, plain-click continues thread, option-click forks new thread on same image, auto-tags, generated titles.</p>
+      </div>
+      <div class="card">
+        <span class="badge badge-blue">P5</span>
+        <h4 style="margin-top:8px">First-run, Settings, packaging</h4>
+        <p>Day 17-19. Welcome wizard, model download flow, Settings window (4 tabs), DMG sign + notarize, manual smoke checklist.</p>
+      </div>
+    </div>
+
+    <div class="callout success">
+      <strong>Minimum viable v2.0</strong>
+      Hotkey capture, OCR routing, text-LLM answer, multi-turn reply, history with search and continue. Vision model is optional — text-route alone covers ~80% of real captures (code, errors, articles). v2.0 ships if vision integration slips.
+    </div>
+
+    <div class="callout warn">
+      <strong>Out of scope (v2.0)</strong>
+      Always-on screen recording, audio capture, cloud LLM fallback, Windows port, knowledge base / RAG, learned preferences, auto-update, telemetry. Each is documented in the spec as a deliberate cut.
+    </div>
+  </section>
+
+  <section class="tab-panel" id="userflow">
+    <h2>User Flow — Capture to Answer</h2>
+    <p style="color: var(--muted)">Primary path. From hotkey press to final stored thread.</p>
+
+    <div class="card">
+      <div class="flow-step">
+        <div class="flow-num persona-user">1</div>
+        <div class="flow-content">
+          <div class="who">User <span class="duration">instant</span></div>
+          <div class="what">Press <code>⌘⇧X</code></div>
+          <div class="detail">Global shortcut registered by HotkeyMgr. Works from any focused app.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-system">2</div>
+        <div class="flow-content">
+          <div class="who">System <span class="duration">~50ms</span></div>
+          <div class="what">Transparent overlay window opens fullscreen on active display</div>
+          <div class="detail">SelectionOverlay React component. Esc cancels, dismissing without DB write.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-user">3</div>
+        <div class="flow-content">
+          <div class="who">User <span class="duration">~2s</span></div>
+          <div class="what">Marquee-select region of interest</div>
+          <div class="detail">Live preview rectangle. On mouse-up, overlay closes and capture is taken.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-system">4</div>
+        <div class="flow-content">
+          <div class="who">CaptureSvc <span class="duration">~100ms</span></div>
+          <div class="what">ScreenCaptureKit captures the bbox to a PNG buffer</div>
+          <div class="detail">DoS guard: reject if PNG &gt; 50 MB. Multi-display stitching if selection crosses boundaries.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-system">5</div>
+        <div class="flow-content">
+          <div class="who">OCRSvc <span class="duration">~300ms</span></div>
+          <div class="what">tesseract.js extracts text + confidence + char count</div>
+          <div class="detail">Failure here falls through to vision route gracefully.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-system">6</div>
+        <div class="flow-content">
+          <div class="who">Router <span class="duration">~1ms</span></div>
+          <div class="what">Density classifier decides text or vision route</div>
+          <div class="detail">text_density &gt; 0.7 → text-LLM. ≤ 0.7 → vision-LLM.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-llm">7</div>
+        <div class="flow-content">
+          <div class="who">MLX runtime <span class="duration">1-15s</span></div>
+          <div class="what">Qwen2.5-7B (text) or Qwen2-VL-7B (vision) streams answer</div>
+          <div class="detail">SSE token stream. Localhost only, never reachable from LAN.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-system">8</div>
+        <div class="flow-content">
+          <div class="who">ResponseWindow <span class="duration">live</span></div>
+          <div class="what">Markdown rendered with rAF-batched re-render + DOMPurify sanitize</div>
+          <div class="detail">User sees tokens streaming. Reply box becomes active when stream completes.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-system">9</div>
+        <div class="flow-content">
+          <div class="who">HistoryStore <span class="duration">async</span></div>
+          <div class="what">Save capture, thread, first turn. Generate 256×256 webp thumbnail.</div>
+          <div class="detail">Embedding via BGE-small + auto-tag classification happen in the background.</div>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num persona-user">10</div>
+        <div class="flow-content">
+          <div class="who">User <span class="duration">optional</span></div>
+          <div class="what">Type follow-up in reply box</div>
+          <div class="detail">ThreadMgr assembles full prior context (image + turns) and dispatches to same model route.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="timeline">
+    <h2>Day-by-Day Timeline</h2>
+    <p style="color: var(--muted)">Click a day for the file plan and key decisions.</p>
+
+    <div class="grid-days" id="dayGrid"></div>
+    <div class="day-detail" id="dayDetail" style="display:none"></div>
+  </section>
+
+  <section class="tab-panel" id="decisions">
+    <h2>Architecture Decisions</h2>
+
+    <details class="decision" open>
+      <summary><span class="dot dot-blue"></span>LLM Runtime — bundle Python via PyInstaller</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> mlx_lm.server is a Python program. Consumers cannot be expected to install Python 3.11+ and pip-install packages.</p>
+        <p><strong>Solution:</strong> Bundle the runtime as <code>resources/runtime/glint-mlx-server</code> — a ~200 MB self-contained PyInstaller binary, signed and notarized.</p>
+        <p><strong>Why:</strong> Native MLX speed on Apple Silicon (vs. ~25% slower with Ollama). One-time build complexity is hidden; user friction is forever.</p>
+        <p><strong>Critical detail:</strong> PyInstaller binaries embed multiple Mach-O subbinaries — each needs <code>codesign --deep</code>. Failure mode is Gatekeeper blocking the spawn at first run; surfaced via toast.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>Storage — sqlite + FTS5 + sqlite-vss</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> Need persistent metadata, keyword search, and semantic search in a single store. Avoid running additional daemons.</p>
+        <p><strong>Solution:</strong> SQLite via better-sqlite3, FTS5 virtual tables for keyword, sqlite-vss extension for vector KNN. One file, one process.</p>
+        <p><strong>Why:</strong> ~50 ms hybrid search at 10k captures is sufficient. LanceDB would add 40 MB and a separate process for marginal gain at our scale.</p>
+        <p><strong>Critical detail:</strong> sqlite-vss arm64 dylib shipped in <code>resources/vss/</code>. Loaded at runtime via <code>db.loadExtension()</code>. Fallback to LanceDB documented if extension fails.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>Three-layer architecture with import boundaries</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> v1 had a 642-line god-file <code>main.ts</code> mixing window management, IPC, OpenAI calls, and screenshot capture. Untestable and unmaintainable.</p>
+        <p><strong>Solution:</strong> Split into Main (Electron orchestration), Core (pure TypeScript logic), Renderer (React UI). Custom ESLint rule blocks <code>fetch</code>/<code>axios</code>/<code>electron</code> imports inside <code>core/**</code>.</p>
+        <p><strong>Why:</strong> Core can be unit-tested in plain Node without Electron stubs. Network bans in Core enforce the privacy promise at lint time.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>Hybrid OCR router for vision quality</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> Local vision models (Qwen2-VL, LLaVA) misread small text. ~80% of real Glint captures are text-heavy (code, errors, articles).</p>
+        <p><strong>Solution:</strong> Run tesseract.js OCR first (free, fast, lossless on text). Density classifier picks text-LLM path or vision-LLM path. Vision is only invoked when capture is image-dominant.</p>
+        <p><strong>Why:</strong> Tesseract runs in &lt;500 ms; text-LLM answers in 1-3 s. Compared to pure-vision-for-everything: 5x faster on the common case, lossless OCR beats vision OCR on dense text.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>Markdown rendering with strict sanitization</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> LLM output rendered in a window is an XSS surface. v1 rendered raw text — safe but ugly.</p>
+        <p><strong>Solution:</strong> Wire <code>marked</code> (already in v1 deps but unused) into ResponseWindow via <code>lib/safeMarkdown.ts</code>. Pipe output through <code>DOMPurify</code> with explicit tag allowlist.</p>
+        <p><strong>Why:</strong> Adversarial markdown fixtures in tests (<code>&lt;script&gt;</code>, <code>javascript:</code> URLs, event handlers) ensure sanitizer holds.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>Streaming UI with rAF batched re-render</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> Re-rendering markdown on every token at &gt;120 tokens/sec drops frames.</p>
+        <p><strong>Solution:</strong> useStream hook accumulates into a buffer; render is committed via <code>requestAnimationFrame</code>. Max one render per frame (~60 fps).</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>History UI — virtualized grid with lazy thumbnails</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> Rendering 10k full PNGs in a grid kills the renderer.</p>
+        <p><strong>Solution:</strong> 256×256 webp thumbnails generated at save (cached in <code>captures/thumbs/</code>). VirtualGrid (react-window) keeps DOM nodes ~50. useThumbnails uses IntersectionObserver to decode only visible images. Max 30 concurrent decodes.</p>
+        <p><strong>Why:</strong> Scroll stays at 60 fps even at 10k items. Full PNG only loaded when user opens a capture.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>IPC channel allowlist</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> Renderer can call any main-process IPC channel by string name. Compromised renderer becomes a privilege escalation path.</p>
+        <p><strong>Solution:</strong> <code>preload/api.ts</code> exposes a frozen object via <code>contextBridge</code>. Channel names are typed enum constants in <code>shared/ipc-channels.ts</code>. Unknown invocations throw at the preload layer.</p>
+      </div>
+    </details>
+
+    <details class="decision">
+      <summary><span class="dot dot-blue"></span>Privacy — localhost-only model server, no telemetry</summary>
+      <div class="body">
+        <p><strong>Problem:</strong> Default Electron app sends update-check probes, exception reports, etc. Privacy promise has to be enforced, not just claimed.</p>
+        <p><strong>Solution:</strong> mlx_lm.server bound to <code>--host 127.0.0.1</code> (negative test connects from 0.0.0.0, expects refusal). Auto-update omitted in v2.0. No analytics. Logger scrubs PII (OCR text, paths) before writing. ESLint rule blocks <code>fetch</code> in core/.</p>
+      </div>
+    </details>
+  </section>
+
+  <section class="tab-panel" id="datamodel">
+    <h2>Data Model</h2>
+    <p style="color: var(--muted)">SQLite schema. Single database file at <code>~/Library/Application Support/Glint/glint.db</code>.</p>
+
+<pre><span class="comment">-- captures: one row per CmdShiftX event</span>
+<span class="key">CREATE TABLE</span> captures (
+  id           <span class="key">TEXT PRIMARY KEY</span>,            <span class="comment">-- uuid v7</span>
+  created_at   <span class="key">INTEGER NOT NULL</span>,            <span class="comment">-- unix ms</span>
+  png_path     <span class="key">TEXT NOT NULL</span>,               <span class="comment">-- relative path</span>
+  ocr_text     <span class="key">TEXT</span>,                        <span class="comment">-- tesseract output</span>
+  ocr_conf     <span class="key">REAL</span>,                        <span class="comment">-- 0-100</span>
+  text_density <span class="key">REAL</span>,                        <span class="comment">-- 0-1</span>
+  route        <span class="key">TEXT NOT NULL</span>,               <span class="comment">-- 'text' | 'vision'</span>
+  tags         <span class="key">TEXT</span>,                        <span class="comment">-- json array</span>
+  thread_id    <span class="key">TEXT NOT NULL REFERENCES</span> threads(id)
+);
+
+<span class="comment">-- threads: a capture plus its multi-turn conversation</span>
+<span class="key">CREATE TABLE</span> threads (
+  id         <span class="key">TEXT PRIMARY KEY</span>,
+  created_at <span class="key">INTEGER NOT NULL</span>,
+  title      <span class="key">TEXT</span>,                          <span class="comment">-- llm-generated</span>
+  pinned     <span class="key">INTEGER DEFAULT</span> 0
+);
+
+<span class="comment">-- turns: every message in a thread</span>
+<span class="key">CREATE TABLE</span> turns (
+  id         <span class="key">TEXT PRIMARY KEY</span>,
+  thread_id  <span class="key">TEXT NOT NULL REFERENCES</span> threads(id),
+  role       <span class="key">TEXT NOT NULL CHECK</span> (role <span class="key">IN</span> (<span class="str">'user'</span>, <span class="str">'assistant'</span>)),
+  content    <span class="key">TEXT NOT NULL</span>,
+  created_at <span class="key">INTEGER NOT NULL</span>,
+  model      <span class="key">TEXT</span>
+);
+
+<span class="comment">-- FTS5 keyword search</span>
+<span class="key">CREATE VIRTUAL TABLE</span> captures_fts <span class="key">USING</span> fts5(
+  ocr_text, tags, content=<span class="str">'captures'</span>, content_rowid=<span class="str">'rowid'</span>
+);
+
+<span class="key">CREATE VIRTUAL TABLE</span> turns_fts <span class="key">USING</span> fts5(
+  content, content=<span class="str">'turns'</span>, content_rowid=<span class="str">'rowid'</span>
+);
+
+<span class="comment">-- sqlite-vss for semantic search (loaded as runtime extension)</span>
+<span class="key">CREATE VIRTUAL TABLE</span> capture_vec <span class="key">USING</span> vss0(
+  embedding(384)                            <span class="comment">-- BGE-small dim</span>
+);
+
+<span class="comment">-- Indices</span>
+<span class="key">CREATE INDEX</span> idx_captures_created <span class="key">ON</span> captures(created_at <span class="key">DESC</span>);
+<span class="key">CREATE INDEX</span> idx_captures_thread  <span class="key">ON</span> captures(thread_id);
+<span class="key">CREATE INDEX</span> idx_turns_thread     <span class="key">ON</span> turns(thread_id, created_at);</pre>
+
+    <h3>Filesystem layout</h3>
+<pre><span class="dir">~/Library/Application Support/Glint/</span>
+├── glint.db              <span class="comment"># SQLite (metadata, FTS5, vectors)</span>
+├── captures/
+│   ├── &lt;uuid&gt;.png        <span class="comment"># original full-res PNG</span>
+│   └── thumbs/
+│       └── &lt;uuid&gt;.webp   <span class="comment"># 256x256 thumbnail for grid</span>
+├── models/
+│   ├── qwen2.5-7b-mlx/
+│   ├── qwen2-vl-7b-mlx/
+│   └── bge-small-en-v1.5-mlx/
+└── logs/
+    └── glint-&lt;date&gt;.log  <span class="comment"># pino, PII-scrubbed, 7-day retention</span></pre>
+
+    <h3>Access rules (privacy)</h3>
+<pre><span class="comment"># Encrypted at rest by macOS FileVault (status surfaced in Settings → Storage)</span>
+<span class="comment"># PII never logged: ocr_text, png_path, tags scrubbed by logger</span>
+<span class="comment"># Localhost-only model server: --host 127.0.0.1, never reachable from LAN</span>
+<span class="comment"># IPC allowlist: renderer can only invoke channels in shared/ipc-channels.ts</span>
+<span class="comment"># Network ban in core/: ESLint rule blocks fetch/axios/electron imports</span></pre>
+  </section>
+
+  <section class="tab-panel" id="reuse">
+    <h2>What We Reuse from v1</h2>
+    <p style="color: var(--muted)">Verified by reading actual v1 source. Patterns are referenced, not copy-pasted — most are rewritten cleaner in v2.</p>
+
+    <div class="card">
+      <div class="reuse-row">
+        <div>
+          <div class="reuse-name">desktopCapturer + multi-display iteration</div>
+          <div class="reuse-source">v1: src/main/screenshot.ts → v2: src/main/capture.ts</div>
+        </div>
+        <div class="reuse-purpose"><code>desktopCapturer.getSources()</code> call shape and <code>screen.getAllDisplays()</code> iteration. ScreenshotResult/ScreenshotError type shapes.</div>
+      </div>
+      <div class="reuse-row">
+        <div>
+          <div class="reuse-name">globalShortcut registration pattern</div>
+          <div class="reuse-source">v1: src/main/hotkey.ts → v2: src/main/hotkey.ts</div>
+        </div>
+        <div class="reuse-purpose">Cmd+Shift+X keybind, register/unregisterAll cleanup pattern, array-tracked active shortcuts.</div>
+      </div>
+      <div class="reuse-row">
+        <div>
+          <div class="reuse-name">Marquee selection math (consolidated)</div>
+          <div class="reuse-source">v1: triplicated → v2: SelectionOverlay/</div>
+        </div>
+        <div class="reuse-purpose">getSelectionStyle() math (Math.abs() width/height, negative-drag reposition). Consolidated to ONE source of truth.</div>
+      </div>
+      <div class="reuse-row">
+        <div>
+          <div class="reuse-name">Response window styling</div>
+          <div class="reuse-source">v1: ResponseWindow.css → v2: ResponseWindow/styles.module.css</div>
+        </div>
+        <div class="reuse-purpose">Minimal-window aesthetic, draggable header, copy-button positioning. Migrated to CSS Modules.</div>
+      </div>
+      <div class="reuse-row">
+        <div>
+          <div class="reuse-name">tesseract.js</div>
+          <div class="reuse-source">v1: dependency unchanged → v2: wrapped in core/ocr/tesseract.ts</div>
+        </div>
+        <div class="reuse-purpose">Worker init, language pack handling. Wrapped behind a clean Core service interface.</div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>NEW work — not reused</strong>
+      Markdown rendering (marked + DOMPurify) — marked was in v1 deps but never imported. Three-layer architecture. Typed IPC contract. All persistence (v1 had electron-store only).
+    </div>
+
+    <div class="callout warn">
+      <strong>Deleted from v1</strong>
+      src/main.ts (642 LOC god-file), duplicate entry points, src/services/openai.ts, src/config.ts, electron-store dep. v1 commit tagged as <code>v1-final</code> for reference.
+    </div>
+  </section>
+
+  <section class="tab-panel" id="risks">
+    <h2>Risks &amp; Mitigations</h2>
+    <table>
+      <thead><tr><th>Risk</th><th>Mitigation</th><th>Fallback</th></tr></thead>
+      <tbody>
+        <tr><td><strong>MLX runtime instability</strong> (Apple ML stack churn)</td><td>Pin MLX version in requirements.txt, snapshot working model files, lock to known-good commit hash</td><td>Ship "rollback runtime" toggle in Settings → Models</td></tr>
+        <tr><td><strong>Local vision quality below user expectations</strong></td><td>Set expectations in onboarding ("works best on text"). OCR-route handles 80% of cases at high quality</td><td>v2.1 opt-in cloud fallback (user-supplied API key, gated)</td></tr>
+        <tr><td><strong>sqlite-vss arm64 binary unavailable</strong></td><td>Verify availability before P3 starts. Adapter pattern in store.ts</td><td>Switch to LanceDB (40 MB extra, well-maintained binaries)</td></tr>
+        <tr><td><strong>Hugging Face download slow / blocked</strong></td><td>Resumable HTTP with checksum. Progress UI</td><td>Document mirror URLs in wizard. Manual download into models/ directory</td></tr>
+        <tr><td><strong>Screen Recording perm UX confusing</strong></td><td>Polished modal with screenshot of System Settings. Auto-open Settings deep-link</td><td>"How to grant" link in error toast with video walkthrough</td></tr>
+        <tr><td><strong>Qwen2.5 context window overflow on long threads</strong></td><td>Auto-summarize older turns in context.ts when token count approaches limit</td><td>Hard-cap at 30 turns, warn user; offer "fork thread" button</td></tr>
+        <tr><td><strong>First-run download interrupted</strong></td><td>Resumable HTTP + checksum verification on resume</td><td>"Continue download" prompt on next launch</td></tr>
+        <tr><td><strong>Code-signing cert expires</strong></td><td>Renew before P5. CI checks expiry &gt; 90 days</td><td>Ship unsigned with documented Gatekeeper override</td></tr>
+        <tr><td><strong>M1 8GB Mac OOMs on vision model</strong></td><td>Detect total RAM at install. Gate vision behind 16GB+. Warn otherwise</td><td>Offer Qwen2-VL-2B (smaller, lower quality) as fallback option</td></tr>
+        <tr><td><strong>PyInstaller binary fails Gatekeeper deep-sign</strong></td><td>codesign --deep --strict on every Mach-O subbinary. Verified in build pipeline</td><td>v2.0.1 fix release; ship initial v2.0 unsigned with prominent warning</td></tr>
+        <tr><td><strong>Tesseract.js worker crashes on weird captures</strong></td><td>try/catch + fall through to vision route automatically</td><td>Toast: "OCR failed, using vision". User can retry capture</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="tab-panel" id="checklist">
+    <h2>Verification Checklist</h2>
+
+    <h3>Manual smoke (pre-release)</h3>
+    <div class="card checklist">
+      <label><input type="checkbox"> CmdShiftX works on every connected monitor</label>
+      <label><input type="checkbox"> Marquee Esc cancels cleanly; no stale overlay window</label>
+      <label><input type="checkbox"> Code screenshot answers in &lt;5s on M2 16GB</label>
+      <label><input type="checkbox"> UI screenshot answers in &lt;20s on M2 16GB</label>
+      <label><input type="checkbox"> Reply box continues conversation; turn persists across quit</label>
+      <label><input type="checkbox"> CmdShiftH opens history in &lt;100 ms</label>
+      <label><input type="checkbox"> Plain-click old capture continues thread (default)</label>
+      <label><input type="checkbox"> Option-click old capture starts new thread on same image</label>
+      <label><input type="checkbox"> Search returns relevant results; ranking feels right</label>
+      <label><input type="checkbox"> Search returns in &lt;100 ms at 10k captures</label>
+      <label><input type="checkbox"> Quit cleans up MLX server (pgrep mlx_lm.server returns empty)</label>
+      <label><input type="checkbox"> Airplane mode after first-run: app fully functional</label>
+      <label><input type="checkbox"> Light + dark mode rendering correct</label>
+      <label><input type="checkbox"> External display capture works; Retina scaling correct</label>
+      <label><input type="checkbox"> Permission re-grant not required after upgrade (signed build only)</label>
+      <label><input type="checkbox"> DMG installs cleanly on fresh Mac with no dev tools present</label>
+      <label><input type="checkbox"> Settings → Models can re-download / remove a model</label>
+      <label><input type="checkbox"> Settings → Hotkeys rebind persists across launches</label>
+      <label><input type="checkbox"> Settings → Storage shows FileVault status, warns if disabled</label>
+      <label><input type="checkbox"> First-run wizard happy path completes in &lt;15 min on 100 Mbps</label>
+    </div>
+
+    <h3>Automated (CI gates)</h3>
+    <div class="card checklist">
+      <label><input type="checkbox"> npm run typecheck — zero errors</label>
+      <label><input type="checkbox"> npm run lint — zero errors (incl. core/ network ban)</label>
+      <label><input type="checkbox"> npm test — coverage ≥ 80% on core/</label>
+      <label><input type="checkbox"> npm run test:e2e — all Playwright specs pass with mocked LLM</label>
+      <label><input type="checkbox"> CI pipeline runs in &lt;5 min</label>
+      <label><input type="checkbox"> No fetch/axios/electron imports in core/** (lint enforced)</label>
+      <label><input type="checkbox"> No console.log in src/** (replaced with logger.ts)</label>
+      <label><input type="checkbox"> All TypeScript files &lt;800 LOC (per coding rules)</label>
+      <label><input type="checkbox"> Localhost-only binding test: connection from 0.0.0.0 refused</label>
+      <label><input type="checkbox"> XSS fixture suite passes (script tags, javascript: URLs sanitized)</label>
+      <label><input type="checkbox"> codesign --verify --deep --strict passes on PyInstaller binary</label>
+      <label><input type="checkbox"> Notarization ticket stapled; spctl assess passes</label>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="diagrams">
+    <h2>Diagrams</h2>
+    <p style="color: var(--muted)">Architecture, capture-to-answer sequence, and first-run state machine. Generated via Mermaid; SVGs live alongside this HTML in <code>diagrams/glint-v2/</code>.</p>
+
+    <h3>Component architecture</h3>
+    <img class="diagram" src="./diagrams/glint-v2/architecture.svg" alt="Component architecture">
+
+    <h3>Capture-to-answer data flow</h3>
+    <img class="diagram" src="./diagrams/glint-v2/data-flow.svg" alt="Data flow sequence">
+
+    <h3>First-run wizard state machine</h3>
+    <img class="diagram" src="./diagrams/glint-v2/state.svg" alt="First-run state machine">
+  </section>
+
+  <p class="footer-note">
+    Plan score 10/10 after 2 review iterations · Spec at docs/superpowers/specs/2026-04-28-glint-v2-design.md · Last updated 2026-04-28
+  </p>
+</main>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.tab-panel');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.tab;
+      tabs.forEach(t => t.classList.toggle('active', t === tab));
+      panels.forEach(p => p.classList.toggle('active', p.id === target));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // Checklist toggle
+  document.querySelectorAll('.checklist label').forEach(label => {
+    const input = label.querySelector('input[type=checkbox]');
+    input.addEventListener('change', () => label.classList.toggle('checked', input.checked));
+  });
+
+  // Day timeline data (hardcoded; rendered via safe DOM methods, no innerHTML)
+  const days = [
+    { num: 1, title: "Branch + delete v1", phase: "P0", summary: "Tag v1-final, branch off, delete v1 sources",
+      newFiles: [".nvmrc", "tsconfig.json"], modFiles: ["forge.config.js → forge.config.ts"],
+      decisions: ["v1 deleted in first commit on feature/v2-rebuild", "Node 20 LTS pinned via .nvmrc"] },
+    { num: 2, title: "Bootstrap scaffold", phase: "P0", summary: "Forge + Vite, three-layer dirs, lint rules, tests stub",
+      newFiles: ["src/main/index.ts", "src/preload/api.ts", "src/renderer/main.tsx", "src/core/logger/index.ts", "vitest.config.ts", "playwright.config.ts", ".eslintrc.cjs"],
+      modFiles: [], decisions: ["Custom ESLint rule blocks fetch/electron in core/**", "HMR via vite-plugin-electron"] },
+    { num: 3, title: "Hotkey + overlay", phase: "P1", summary: "Global shortcut, marquee window, selection overlay",
+      newFiles: ["src/main/hotkey.ts", "src/main/windows/overlay.ts", "src/renderer/components/SelectionOverlay/"],
+      modFiles: [], decisions: ["Marquee math consolidated to single SelectionOverlay (was triplicated in v1)"] },
+    { num: 4, title: "Capture + permissions", phase: "P1", summary: "ScreenCaptureKit bridge, Screen Recording perm flow",
+      newFiles: ["src/main/capture.ts", "src/main/permissions.ts"],
+      modFiles: [], decisions: ["Permission denial deep-links to System Settings", "DoS guard: reject PNGs >50 MB"] },
+    { num: 5, title: "OCR + router", phase: "P1", summary: "tesseract.js wrapper, density classifier",
+      newFiles: ["src/core/ocr/tesseract.ts", "src/core/router/density.ts"],
+      modFiles: [], decisions: ["Density threshold 0.7 (text-heavy → text route)"] },
+    { num: 6, title: "MLX runtime + client", phase: "P1", summary: "Spawn mlx_lm.server, HTTP client, prompt loader",
+      newFiles: ["src/core/models/runtime.ts", "src/core/models/client.ts", "src/core/models/prompts.ts", "prompts/answer-text.md"],
+      modFiles: [], decisions: ["Localhost-only --host 127.0.0.1", "Ephemeral port fallback if 8765 taken", "GLINT_LLM=fake env for dev"] },
+    { num: 7, title: "Response window + streaming", phase: "P1", summary: "ResponseWindow, MarkdownView with DOMPurify, useStream",
+      newFiles: ["src/main/windows/response.ts", "src/renderer/components/ResponseWindow/", "src/renderer/lib/safeMarkdown.ts", "src/renderer/hooks/useStream.ts"],
+      modFiles: [], decisions: ["rAF batched re-render", "DOMPurify with strict tag allowlist", "Adversarial markdown fixtures in tests"] },
+    { num: 8, title: "Vision route variant", phase: "P2", summary: "Qwen2-VL integration, two-process MLX runtime",
+      newFiles: ["prompts/answer-vision.md"], modFiles: ["src/core/models/runtime.ts (manage 2 processes)", "src/core/models/client.ts (.vision() method)"],
+      decisions: ["Optional vision model — graceful fallback if not installed"] },
+    { num: 9, title: "Vision E2E + tests", phase: "P2", summary: "Image upload pipeline end-to-end, regression tests",
+      newFiles: ["tests/e2e/capture-vision.spec.ts", "tests/integration/runtime-mlx-vision.test.ts"],
+      modFiles: [], decisions: ["Vision capture latency budget: <20s on M2"] },
+    { num: 10, title: "DB + migrations", phase: "P3", summary: "SQLite, FTS5, sqlite-vss, schema",
+      newFiles: ["migrations/0001_init.sql", "src/core/history/migrations.ts", "src/core/history/store.ts", "resources/vss/vss0.dylib"],
+      modFiles: [], decisions: ["sqlite-vss loaded as runtime extension", "Adapter pattern for LanceDB fallback"] },
+    { num: 11, title: "Embeddings + search", phase: "P3", summary: "BGE-small, hybrid rank (BM25 + cosine), thumbnails",
+      newFiles: ["src/core/embed/bge.ts", "src/core/history/search.ts", "src/core/history/thumbnails.ts"],
+      modFiles: [], decisions: ["Hybrid weight: 0.4·BM25 + 0.6·cosine", "256x256 webp thumbs cached on save"] },
+    { num: 12, title: "History panel UI", phase: "P3", summary: "Virtual grid, search input, IntersectionObserver thumbs",
+      newFiles: ["src/main/windows/history.ts", "src/renderer/components/HistoryPanel/", "src/renderer/hooks/useHistory.ts", "src/renderer/hooks/useThumbnails.ts"],
+      modFiles: [], decisions: ["react-window VirtualGrid (~50 DOM nodes max)", "Keyboard nav + ARIA labels"] },
+    { num: 13, title: "History tests + perf", phase: "P3", summary: "Seed 10k rows, assert <100ms search, full E2E",
+      newFiles: ["tests/integration/search-perf.test.ts", "tests/e2e/history-panel.spec.ts"],
+      modFiles: [], decisions: ["Perf budget enforced in CI"] },
+    { num: 14, title: "Threads + context", phase: "P4", summary: "ThreadMgr, prompt assembly, multi-turn UI",
+      newFiles: ["src/core/threads/manager.ts", "src/core/threads/context.ts", "src/renderer/components/ResponseWindow/ChatReply.tsx", "src/renderer/components/ResponseWindow/TurnList.tsx", "src/renderer/hooks/useThread.ts"],
+      modFiles: [], decisions: ["Reply disabled while initial stream active", "Auto-summarize older turns near context limit"] },
+    { num: 15, title: "Continue + re-ask + auto-tag + titles", phase: "P4", summary: "Plain-click vs option-click, classifier, title gen",
+      newFiles: ["src/core/threads/tags.ts", "src/core/threads/titles.ts", "prompts/classify.md", "prompts/title.md"],
+      modFiles: [], decisions: ["Closed-set tag taxonomy (10 labels)", "Title fallback: first 60 chars of OCR"] },
+    { num: 16, title: "Threads E2E + polish", phase: "P4", summary: "Continue/re-ask flows, tag pipeline regression tests",
+      newFiles: ["tests/e2e/threads.spec.ts", "tests/integration/continue-thread.test.ts"],
+      modFiles: [], decisions: [] },
+    { num: 17, title: "First-run wizard", phase: "P5", summary: "Welcome, permissions, model downloads",
+      newFiles: ["src/main/first-run.ts", "src/main/downloads.ts", "src/renderer/windows/FirstRun/"],
+      modFiles: [], decisions: ["Resumable HTTP with checksum", "Vision model optional, skippable"] },
+    { num: 18, title: "Settings + PyInstaller runtime", phase: "P5", summary: "Settings 4 tabs, build glint-mlx-server binary",
+      newFiles: ["src/renderer/windows/Settings/", "build/python/build-runtime.sh", "build/python/runtime.spec", "build/entitlements.mac.plist"],
+      modFiles: ["forge.config.ts (extraResource for runtime/, vss/)"],
+      decisions: ["PyInstaller --strip --upx for size", "codesign --deep on every subbinary"] },
+    { num: 19, title: "DMG sign + notarize + smoke", phase: "P5", summary: "Manual smoke checklist, release artifacts",
+      newFiles: ["build/notarize.js", ".github/workflows/ci.yml", "README.md (rewritten for v2)"],
+      modFiles: [], decisions: ["Manual smoke on M1, M2, M3", "Tag v2.0.0 + GitHub Release"] }
+  ];
+
+  // Render day grid using safe DOM methods (no innerHTML)
+  function el(tag, className, text) {
+    const e = document.createElement(tag);
+    if (className) e.className = className;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  const dayGrid = document.getElementById('dayGrid');
+  const dayDetail = document.getElementById('dayDetail');
+
+  function renderDayCards() {
+    days.forEach(d => {
+      const card = el('div', 'day-card');
+      const num = el('div', 'day-num');
+      num.appendChild(document.createTextNode('Day ' + d.num + ' · '));
+      const phaseBadge = el('span', 'badge badge-blue', d.phase);
+      num.appendChild(phaseBadge);
+      const title = el('div', 'day-title', d.title);
+      const summary = el('div', 'day-summary', d.summary);
+      card.appendChild(num);
+      card.appendChild(title);
+      card.appendChild(summary);
+      card.addEventListener('click', () => selectDay(d, card));
+      dayGrid.appendChild(card);
+    });
+  }
+
+  function selectDay(d, card) {
+    document.querySelectorAll('.day-card').forEach(c => c.classList.remove('active'));
+    card.classList.add('active');
+
+    // Clear and rebuild detail
+    while (dayDetail.firstChild) dayDetail.removeChild(dayDetail.firstChild);
+    dayDetail.style.display = 'block';
+
+    const num = el('div', 'day-num');
+    num.appendChild(document.createTextNode('Day ' + d.num + ' · '));
+    num.appendChild(el('span', 'badge badge-blue', d.phase));
+    dayDetail.appendChild(num);
+
+    dayDetail.appendChild(el('h4', null, d.title));
+    const summary = el('p', null, d.summary);
+    summary.style.color = 'var(--muted)';
+    dayDetail.appendChild(summary);
+
+    dayDetail.appendChild(el('h3', null, 'New files'));
+    const newPre = el('pre');
+    if (d.newFiles.length === 0) {
+      newPre.appendChild(el('span', 'comment', '# none'));
+    } else {
+      d.newFiles.forEach(f => {
+        const span = el('span', 'new', '+ ' + f);
+        newPre.appendChild(span);
+      });
+    }
+    dayDetail.appendChild(newPre);
+
+    dayDetail.appendChild(el('h3', null, 'Modified files'));
+    const modPre = el('pre');
+    if (d.modFiles.length === 0) {
+      modPre.appendChild(el('span', 'comment', '# none'));
+    } else {
+      d.modFiles.forEach(f => {
+        const span = el('span', 'mod', '~ ' + f);
+        modPre.appendChild(span);
+      });
+    }
+    dayDetail.appendChild(modPre);
+
+    dayDetail.appendChild(el('h3', null, 'Key decisions'));
+    if (d.decisions.length === 0) {
+      const p = el('p', null, 'No new architectural decisions on this day.');
+      p.style.color = 'var(--muted)';
+      dayDetail.appendChild(p);
+    } else {
+      const ul = el('ul');
+      d.decisions.forEach(x => ul.appendChild(el('li', null, x)));
+      dayDetail.appendChild(ul);
+    }
+
+    dayDetail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  renderDayCards();
+</script>
+
+</body>
+</html>
