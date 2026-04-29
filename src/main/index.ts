@@ -2,6 +2,16 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
 import { createLogger } from '../core/logger/index.js';
+
+// Catch otherwise-silent main-process failures and surface them via the
+// daily logger. Without this an early throw vanishes (Electron just exits
+// without printing the stack to any visible stdout in dev).
+process.on('uncaughtException', (e) => {
+  createLogger('main').fatal({ err: e.stack ?? String(e) }, 'uncaught exception');
+});
+process.on('unhandledRejection', (e) => {
+  createLogger('main').error({ err: String(e) }, 'unhandled rejection');
+});
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
 import { closeOverlay, openOverlay } from './windows/overlay.js';
 import { openHistory } from './windows/history.js';

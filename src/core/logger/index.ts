@@ -5,6 +5,7 @@
  * logs. The redact list below is enforced at log-call time.
  */
 import pino from 'pino';
+import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
@@ -25,35 +26,40 @@ const logDir = path.join(
   'logs',
 );
 
-const isDev = process.env.NODE_ENV !== 'production';
 const isDebug = process.env.GLINT_DEBUG === '1';
+
+// Build the daily log path lazily so vitest (no electron app dir) doesn't fail.
+function dailyLogPath(): string {
+  return path.join(logDir, `glint-${new Date().toISOString().slice(0, 10)}.log`);
+}
 
 export type Logger = pino.Logger;
 
+/**
+ * Logger writes ONE place: a rolling daily file. We deliberately avoid
+ * pino-pretty's worker-thread transport because Vite + Electron can't
+ * resolve the worker module path at runtime (Cannot find module
+ * '.vite/build/lib/worker.js'). Tail the file in dev:
+ *
+ *   tail -f ~/Library/Application\ Support/Glint/logs/glint-*.log
+ */
 export function createLogger(name: string): Logger {
-  return pino({
-    name,
-    level: isDebug ? 'debug' : 'info',
-    redact: {
-      paths: PII_KEYS,
-      censor: '<redacted>',
+  let stream: pino.DestinationStream | undefined;
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+    stream = pino.destination({ dest: dailyLogPath(), sync: false, mkdir: true });
+  } catch {
+    // Tests / sandboxed contexts: fall back to stdout.
+    stream = undefined;
+  }
+  return pino(
+    {
+      name,
+      level: isDebug ? 'debug' : 'info',
+      redact: { paths: PII_KEYS, censor: '<redacted>' },
     },
-    transport: isDev
-      ? {
-          target: 'pino-pretty',
-          options: { colorize: true, translateTime: 'HH:MM:ss.l' },
-        }
-      : {
-          target: 'pino/file',
-          options: {
-            destination: path.join(
-              logDir,
-              `glint-${new Date().toISOString().slice(0, 10)}.log`,
-            ),
-            mkdir: true,
-          },
-        },
-  });
+    stream,
+  );
 }
 
 /** Default app-wide logger. Modules should prefer createLogger('module'). */

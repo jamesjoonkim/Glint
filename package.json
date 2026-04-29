@@ -2,7 +2,7 @@
   "name": "glint",
   "version": "2.0.0-alpha.0",
   "description": "Local-first AI screenshot assistant for Apple Silicon Macs.",
-  "main": ".vite/build/main.js",
+  "main": ".vite/build/index.js",
   "license": "MIT",
   "author": "James Kim",
   "engines": {
