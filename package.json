@@ -1,76 +1,66 @@
 {
   "name": "glint",
-  "version": "1.0.0",
-  "description": "A smart screenshot tool powered by GPT-4V",
-  "main": "dist/main.js",
-  "scripts": {
-    "start": "electron .",
-    "build": "tsc",
-    "watch": "tsc -w",
-    "lint": "eslint -c .eslintrc --ext .ts ./src",
-    "make": "electron-forge make",
-    "make:win": "electron-forge make --platform win32",
-    "make:mac": "electron-forge make --platform darwin",
-    "package": "electron-forge package",
-    "postinstall": "electron-builder install-app-deps"
-  },
-  "author": "James Kim",
+  "version": "2.0.0-alpha.0",
+  "description": "Local-first AI screenshot assistant for Apple Silicon Macs.",
+  "main": ".vite/build/main.js",
   "license": "MIT",
-  "devDependencies": {
-    "@electron-forge/cli": "^7.2.0",
-    "@electron-forge/maker-deb": "^7.2.0",
-    "@electron-forge/maker-dmg": "^7.2.0",
-    "@electron-forge/maker-rpm": "^7.2.0",
-    "@electron-forge/maker-squirrel": "^7.2.0",
-    "@electron-forge/maker-zip": "^7.2.0",
-    "@electron-forge/publisher-github": "^7.8.0",
-    "@types/node": "^20.0.0",
-    "@types/react": "^18.3.20",
-    "@types/react-dom": "^18.3.6",
-    "@typescript-eslint/eslint-plugin": "^6.0.0",
-    "@typescript-eslint/parser": "^6.0.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.13.3",
-    "electron-rebuild": "^3.2.9",
-    "eslint": "^8.0.0",
-    "typescript": "^5.0.0"
+  "author": "James Kim",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "dev": "electron-forge start",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint --ext .ts,.tsx ./src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "glint": {
+    "models": {
+      "text": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+      "vision": "mlx-community/Qwen2-VL-7B-Instruct-4bit",
+      "embed": "mlx-community/bge-small-en-v1.5-mlx"
+    }
   },
   "dependencies": {
-    "@electron/remote": "^2.1.0",
-    "dotenv": "^16.5.0",
-    "electron-store": "^8.1.0",
-    "marked": "^11.1.0",
-    "openai": "^4.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "better-sqlite3": "^11.5.0",
+    "dompurify": "^3.2.0",
+    "marked": "^14.1.0",
+    "pino": "^9.5.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-window": "^1.8.10",
     "tesseract.js": "^6.0.1"
   },
-  "config": {
-    "forge": {
-      "packagerConfig": {
-        "name": "Glint",
-        "executableName": "Glint",
-        "asar": true,
-        "arch": ["x64", "arm64"],
-        "platform": ["win32"]
-      },
-      "makers": [
-        {
-          "name": "@electron-forge/maker-zip",
-          "platforms": ["win32"],
-          "config": {
-            "arch": ["x64", "arm64"]
-          }
-        },
-        {
-          "name": "@electron-forge/maker-dmg",
-          "platforms": ["darwin"],
-          "config": {
-            "name": "Glint",
-            "format": "ULFO"
-          }
-        }
-      ]
-    }
+  "devDependencies": {
+    "@electron-forge/cli": "^7.5.0",
+    "@electron-forge/maker-dmg": "^7.5.0",
+    "@electron-forge/maker-zip": "^7.5.0",
+    "@electron-forge/plugin-vite": "^7.5.0",
+    "@playwright/test": "^1.48.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/dompurify": "^3.0.5",
+    "@types/node": "^20.16.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/react-window": "^1.8.8",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitejs/plugin-react": "^4.3.3",
+    "@vitest/coverage-v8": "^2.1.4",
+    "electron": "^32.2.0",
+    "electron-playwright-helpers": "^1.7.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "pino-pretty": "^11.3.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "vitest": "^2.1.4"
   }
 }

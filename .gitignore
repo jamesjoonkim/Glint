@@ -1,30 +1,34 @@
-# Dependencies
+# dependencies
 node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+.pnp/
+.pnp.js
 
-# Build output
-dist/
+# build output
 out/
-release/
-*.js.map
+dist/
+.vite/
 
-# Environment variables
+# bundled runtime (downloaded/built locally)
+resources/runtime/
+
+# user data (created at runtime, never committed)
+glint.db
+captures/
+models/
+logs/
+
+# coverage + test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# editor + os
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# env
 .env
 .env.local
-.env.*.local
-
-# IDE and editor files
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-
-# Logs
-logs/
-*.log
-
-# OS files
-Thumbs.db

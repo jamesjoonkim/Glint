@@ -1,0 +1,49 @@
+import type { ForgeConfig } from '@electron-forge/shared-types';
+import { VitePlugin } from '@electron-forge/plugin-vite';
+import { MakerDMG } from '@electron-forge/maker-dmg';
+import { MakerZIP } from '@electron-forge/maker-zip';
+
+const config: ForgeConfig = {
+  packagerConfig: {
+    asar: true,
+    name: 'Glint',
+    appBundleId: 'app.glint.macos',
+    appCategoryType: 'public.app-category.productivity',
+    icon: 'resources/icon',
+    osxSign: process.env.APPLE_DEV_ID_APPLICATION
+      ? { identity: process.env.APPLE_DEV_ID_APPLICATION }
+      : undefined,
+    osxNotarize:
+      process.env.CI && process.env.APPLE_ID
+        ? {
+            appleId: process.env.APPLE_ID,
+            appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD!,
+            teamId: process.env.APPLE_TEAM_ID!,
+          }
+        : undefined,
+    extraResource: ['resources/runtime', 'resources/vss'].filter((p) => {
+      try {
+        require('fs').accessSync(p);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  },
+  rebuildConfig: {},
+  makers: [
+    new MakerDMG({ name: 'Glint', format: 'ULFO', overwrite: true }),
+    new MakerZIP({}, ['darwin']),
+  ],
+  plugins: [
+    new VitePlugin({
+      build: [
+        { entry: 'src/main/index.ts', config: 'vite.main.config.ts', target: 'main' },
+        { entry: 'src/preload/api.ts', config: 'vite.preload.config.ts', target: 'preload' },
+      ],
+      renderer: [{ name: 'main_window', config: 'vite.renderer.config.ts' }],
+    }),
+  ],
+};
+
+export default config;
