@@ -1,8 +1,14 @@
-# Pinned dependencies for the bundled mlx_lm runtime.
+# Pinned dependencies for the bundled mlx_lm + mlx_vlm runtime.
 # Updated only by deliberate review — model compatibility is sensitive
-# to MLX version.
-mlx==0.21.1
-mlx-lm==0.20.6
-mlx-vlm==0.1.10
-huggingface-hub==0.26.5
+# to MLX version. Last bump 2026-04-29 for Qwen3-VL-8B (needs mlx-vlm 0.3+).
+mlx==0.31.2
+mlx-metal==0.31.2
+mlx-lm==0.31.3
+mlx-vlm==0.4.4
+huggingface-hub==1.12.0
 sentencepiece==0.2.0
+# Qwen3-VL's AutoProcessor hard-imports torch via VideoProcessor even
+# though we only do single-image inference. Bundle the arm64 CPU build.
+torch==2.11.0
+torchvision==0.26.0
+transformers==5.7.0

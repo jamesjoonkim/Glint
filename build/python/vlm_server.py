@@ -114,9 +114,14 @@ def _generate_answer(image: str | None, prompt: str, max_tokens: int) -> str:
         max_tokens=max_tokens,
         verbose=False,
     )
-    # mlx_vlm.generate returns either a string or a tuple in newer versions.
+    # mlx_vlm.generate return shape varies by version:
+    #   0.1.x  → str
+    #   0.2.x  → tuple (text, ...)
+    #   0.4.x  → GenerationResult dataclass with .text attribute
+    if hasattr(output, "text"):
+        return str(output.text)
     if isinstance(output, tuple):
-        return output[0] if output else ""
+        return str(output[0]) if output else ""
     return str(output)
 
 

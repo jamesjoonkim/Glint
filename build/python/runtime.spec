@@ -15,16 +15,25 @@ block_cipher = None
 
 hidden = (
     collect_submodules('mlx')
+    + collect_submodules('mlx_metal')
     + collect_submodules('mlx_lm')
     + collect_submodules('mlx_vlm')
     + collect_submodules('huggingface_hub')
+    # Qwen3-VL's AutoProcessor pulls in transformers' VideoProcessor which
+    # hard-imports torch + torchvision even though we never run video.
+    + collect_submodules('torch')
+    + collect_submodules('torchvision')
+    + collect_submodules('transformers')
     + ['sentencepiece']
 )
 
 datas = (
     collect_data_files('mlx')
+    + collect_data_files('mlx_metal')
     + collect_data_files('mlx_lm')
     + collect_data_files('mlx_vlm')
+    + collect_data_files('torch')
+    + collect_data_files('transformers')
 )
 
 a = Analysis(
