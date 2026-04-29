@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { promises as fs } from 'node:fs';
 import { createLogger } from '../core/logger/index.js';
 import { runOcr } from '../core/ocr/tesseract.js';
 import { classify } from '../core/router/density.js';
@@ -7,7 +8,9 @@ import {
   buildVisionMessage,
   streamCompletion,
   type ClientConfig,
+  type ImagePart,
   type Message,
+  type TextPart,
 } from '../core/models/client.js';
 import type { CaptureRecord } from './capture.js';
 import { openResponse, getResponseWindow } from './windows/response.js';
@@ -195,6 +198,122 @@ export async function buildVisionFollowupRequest(
 function findCapturesForThread(threadId: string) {
   // Most-recent capture for a thread (one per thread until v2.1).
   return listRecent(500).find((c) => c.thread_id === threadId) ?? null;
+}
+
+/**
+ * Run a "composed turn" — a single user message that bundles N attached
+ * images plus optional text, producing ONE assistant response that sees all
+ * images at once. Used by the chat input's deferred-attachments flow.
+ *
+ * Compared to runPipeline (per-capture) and continueThread (text-only):
+ * - Multiple images go into the SAME user-turn content array as image_url
+ *   parts, so Qwen3-VL gets all of them in a single attention pass and can
+ *   compare/contrast.
+ * - The user-visible text turn (saved in DB) is the user's actual prompt
+ *   (or a placeholder if image-only), keeping the conversation log readable.
+ * - Prior turns are included as text-only context — image-stickiness is
+ *   handled by previously composed turns having their images encoded in
+ *   their assistant responses (the "image only on first turn" rule applies
+ *   per turn-cluster, not per thread).
+ */
+export async function runComposedTurn(args: {
+  threadId: string;
+  pngPaths: string[];
+  text: string;
+  deps?: PipelineDeps;
+}): Promise<{ streamId: string }> {
+  const deps = args.deps ?? DEFAULT_DEPS;
+  const win = () => getResponseWindow();
+  const send = (channel: string, payload: unknown) => {
+    win()?.webContents.send(channel, payload);
+  };
+
+  const streamId = randomUUID();
+  send('response:set-stream', { streamId });
+
+  const controller = new AbortController();
+  activeControllers.set(streamId, controller);
+
+  try {
+    // Save the user-visible text turn. Image-only sends use a placeholder
+    // so the turn list shows something for the user bubble.
+    const userVisible = args.text.trim()
+      ? args.text
+      : `[${args.pngPaths.length} image${args.pngPaths.length === 1 ? '' : 's'} attached]`;
+    appendTurn(args.threadId, 'user', userVisible);
+
+    const hasImages = args.pngPaths.length > 0;
+    const useVision = hasImages && !!deps.visionUrl;
+    const allTurns = getTurns(args.threadId);
+    // Exclude the user turn we just appended — we'll add it as a multimodal
+    // message below for the vision path, or as a text user turn for text path.
+    const priorTurns = allTurns.slice(0, -1);
+
+    let cfg: ClientConfig;
+    let model: string;
+    let messages: Message[];
+
+    if (useVision) {
+      const systemPrompt = await loadPrompt('answer-vision');
+      cfg = { baseUrl: deps.visionUrl ?? 'http://127.0.0.1:8766' };
+      model = deps.visionModel;
+
+      const userParts: Array<TextPart | ImagePart> = [];
+      for (const pngPath of args.pngPaths) {
+        const bytes = await fs.readFile(pngPath);
+        const b64 = bytes.toString('base64');
+        userParts.push({
+          type: 'image_url',
+          image_url: { url: `data:image/png;base64,${b64}` },
+        });
+      }
+      userParts.push({
+        type: 'text',
+        text: args.text.trim() || 'Describe and analyze the attached image(s).',
+      });
+
+      messages = [
+        { role: 'system', content: systemPrompt },
+        ...priorTurns.map((t) => ({ role: t.role, content: t.content })),
+        { role: 'user', content: userParts },
+      ];
+    } else {
+      // No images, or vision runtime unavailable → fall back to text path.
+      const systemPrompt = await loadPrompt('answer-chat');
+      cfg = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
+      model = deps.textModel;
+
+      messages = [
+        { role: 'system', content: systemPrompt },
+        ...allTurns.map((t) => ({ role: t.role, content: t.content })),
+      ];
+    }
+
+    let answer = '';
+    const onTok = (chunk: string) => {
+      answer += chunk;
+      send('model:stream:token', { id: streamId, chunk });
+    };
+
+    log.info(
+      { threadId: args.threadId, images: args.pngPaths.length, hasText: !!args.text, useVision },
+      'composed turn dispatch',
+    );
+    const stream = streamCompletion(cfg, { model, messages }, controller.signal);
+    for await (const tok of stream) onTok(tok);
+
+    const aborted = controller.signal.aborted;
+    const final = aborted && answer ? `${answer}\n\n_[stopped]_` : answer;
+    if (final) appendTurn(args.threadId, 'assistant', final, model);
+    send('model:stream:done', { id: streamId });
+  } catch (err) {
+    log.error({ err: String(err), threadId: args.threadId }, 'composed turn failed');
+    send('model:stream:error', { id: streamId, error: String(err) });
+  } finally {
+    activeControllers.delete(streamId);
+  }
+
+  return { streamId };
 }
 
 /**

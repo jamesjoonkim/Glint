@@ -76,32 +76,31 @@ export function ChatReply({
     if (!trimmed && attachments.length === 0) return;
     if (!threadId && attachments.length > 0) return;
 
-    // Snapshot current state, clear UI immediately so the user can keep
-    // typing while images upload.
+    // Snapshot then clear so the user can keep typing while the request
+    // flies.
     const text = trimmed;
     const queued = attachments;
     setValue('');
     setAttachments([]);
 
     if (queued.length === 0) {
+      // Text-only path stays on the existing continueThread flow.
       onSend(text);
       return;
     }
 
     setSending(true);
     try {
-      // Fire each attached image through the pipeline in sequence. Each
-      // becomes its own capture row in the thread. Multi-image-as-single-
-      // turn (one combined assistant response) is a future enhancement.
-      for (const att of queued) {
-        await window.glint?.invoke?.('capture:attachImage', {
-          threadId,
-          dataUrl: att.dataUrl,
-        });
-      }
-      if (text) onSend(text);
+      // Multi-image + text → one composed turn. Main saves each image as
+      // a capture row, builds a single multimodal vision message with
+      // [text, ...image_url(N)], streams ONE assistant response.
+      await window.glint?.invoke?.('chat:sendComposed', {
+        threadId,
+        attachments: queued.map((a) => ({ dataUrl: a.dataUrl })),
+        text,
+      });
     } catch (err) {
-      console.error('capture:attachImage failed', err);
+      console.error('chat:sendComposed failed', err);
     } finally {
       setSending(false);
     }

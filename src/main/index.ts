@@ -31,11 +31,12 @@ import { hideResponseWindow, onResponseClosed, openResponse } from './windows/re
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
-import { cancelStream, continueThread, runPipeline, startStream, type PipelineDeps } from './pipeline.js';
+import { cancelStream, continueThread, runComposedTurn, runPipeline, startStream, type PipelineDeps } from './pipeline.js';
 import { destroyWorker } from '../core/ocr/tesseract.js';
 import { startRuntime, type RuntimeHandle } from '../core/models/runtime.js';
 import {
   closeStore,
+  createCaptureWithThread,
   createThread,
   getTurns,
   listChatThreads,
@@ -145,48 +146,18 @@ function wireIpc(): void {
     const threadId = (payload as { threadId?: unknown })?.threadId;
     const dataUrl = (payload as { dataUrl?: unknown })?.dataUrl;
     if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
-    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
-      return { ok: false, error: 'invalid dataUrl' };
-    }
-    const comma = dataUrl.indexOf(',');
-    const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : '';
-    if (!base64) return { ok: false, error: 'malformed dataUrl' };
+    if (typeof dataUrl !== 'string') return { ok: false, error: 'invalid dataUrl' };
 
-    let pngBuffer: Buffer;
-    let width: number;
-    let height: number;
-    try {
-      const raw = Buffer.from(base64, 'base64');
-      // Hard cap: 25MB. Same DoS posture as desktopCapturer captures.
-      if (raw.byteLength > 25 * 1024 * 1024) {
-        return { ok: false, error: 'image too large' };
-      }
-      const native = nativeImage.createFromBuffer(raw);
-      if (native.isEmpty()) return { ok: false, error: 'unrecognized image' };
-      const size = native.getSize();
-      width = size.width;
-      height = size.height;
-      // Re-encode through nativeImage so we always write PNG, even if the
-      // user pasted JPEG/HEIC/etc. Downstream OCR + thumbnail expect PNG.
-      pngBuffer = native.toPNG();
-    } catch (err) {
-      log.warn({ err: String(err) }, 'attachImage decode failed');
-      return { ok: false, error: 'decode failed' };
-    }
-
-    const id = randomUUID();
-    const dir = resolveCapturesDir();
-    await fsp.mkdir(dir, { recursive: true });
-    const pngPath = path.join(dir, `${id}.png`);
-    await fsp.writeFile(pngPath, pngBuffer);
-    log.info({ id, threadId, width, height, bytes: pngBuffer.byteLength }, 'image attached');
+    const decoded = await decodeAndWriteImage(dataUrl);
+    if ('error' in decoded) return { ok: false, error: decoded.error };
+    log.info({ id: decoded.id, threadId, ...decoded.size }, 'image attached');
 
     const record: CaptureRecord = {
-      id,
-      pngPath,
-      bbox: { x: 0, y: 0, width, height, displayId: 0 },
+      id: decoded.id,
+      pngPath: decoded.pngPath,
+      bbox: { x: 0, y: 0, width: decoded.size.width, height: decoded.size.height, displayId: 0 },
       displayId: 0,
-      byteSize: pngBuffer.byteLength,
+      byteSize: decoded.bytes,
     };
 
     const streamId = startStream();
@@ -194,7 +165,65 @@ function wireIpc(): void {
       await Promise.allSettled([textRuntimePromise, visionRuntimePromise]);
       return runPipeline(record, streamId, getPipelineDeps(), threadId);
     })();
-    return { ok: true, id, streamId };
+    return { ok: true, id: decoded.id, streamId };
+  });
+
+  ipcMain.handle('chat:sendComposed', async (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    const attachments = (payload as { attachments?: unknown })?.attachments;
+    const text = (payload as { text?: unknown })?.text;
+    if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
+    if (!Array.isArray(attachments)) return { ok: false, error: 'invalid attachments' };
+    const textStr = typeof text === 'string' ? text : '';
+
+    // Save each attachment as a capture row, collect pngPaths for the
+    // composed multimodal user turn.
+    const pngPaths: string[] = [];
+    for (const att of attachments) {
+      const dataUrl = (att as { dataUrl?: unknown })?.dataUrl;
+      if (typeof dataUrl !== 'string') continue;
+      const decoded = await decodeAndWriteImage(dataUrl);
+      if ('error' in decoded) {
+        log.warn({ err: decoded.error }, 'composed attachment decode failed');
+        continue;
+      }
+      // Persist the capture row so it shows up in history. Skip OCR — these
+      // are explicit user-attached images, the composed turn always goes
+      // through the vision route when possible.
+      try {
+        createCaptureWithThread({
+          pngPath: decoded.pngPath,
+          ocrText: '',
+          ocrConfidence: 0,
+          textDensity: 0,
+          route: 'vision',
+          threadId,
+        });
+      } catch (err) {
+        log.warn({ err: String(err) }, 'composed attachment row insert failed');
+      }
+      pngPaths.push(decoded.pngPath);
+    }
+
+    log.info(
+      { threadId, images: pngPaths.length, hasText: !!textStr.trim() },
+      'composed turn requested',
+    );
+
+    void (async () => {
+      await Promise.allSettled([textRuntimePromise, visionRuntimePromise]);
+      try {
+        await runComposedTurn({
+          threadId,
+          pngPaths,
+          text: textStr,
+          deps: getPipelineDeps(),
+        });
+      } catch (err) {
+        log.error({ err: String(err), threadId }, 'composed turn failed');
+      }
+    })();
+    return { ok: true };
   });
 
   ipcMain.handle('capture:request', async (_e, bbox: CaptureBBox) => {
@@ -398,6 +427,45 @@ function resolveCapturesDir(): string {
     'Glint',
     'captures',
   );
+}
+
+/**
+ * Decode a `data:image/...;base64,...` URL, normalize through nativeImage
+ * (so JPEG/HEIC/WebP all become PNG), write it to the captures dir under a
+ * fresh UUID, and return the saved path + image size. Hard 25MB cap to
+ * match desktopCapturer's MAX_PNG_BYTES posture.
+ *
+ * Used by both capture:attachImage (single-image-as-capture flow) and
+ * chat:sendComposed (multi-image bundle).
+ */
+async function decodeAndWriteImage(
+  dataUrl: string,
+): Promise<
+  | { id: string; pngPath: string; size: { width: number; height: number }; bytes: number }
+  | { error: string }
+> {
+  if (!dataUrl.startsWith('data:image/')) return { error: 'invalid dataUrl' };
+  const comma = dataUrl.indexOf(',');
+  const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : '';
+  if (!base64) return { error: 'malformed dataUrl' };
+  let pngBuffer: Buffer;
+  let size: { width: number; height: number };
+  try {
+    const raw = Buffer.from(base64, 'base64');
+    if (raw.byteLength > 25 * 1024 * 1024) return { error: 'image too large' };
+    const native = nativeImage.createFromBuffer(raw);
+    if (native.isEmpty()) return { error: 'unrecognized image' };
+    size = native.getSize();
+    pngBuffer = native.toPNG();
+  } catch (err) {
+    return { error: `decode failed: ${String(err)}` };
+  }
+  const id = randomUUID();
+  const dir = resolveCapturesDir();
+  await fsp.mkdir(dir, { recursive: true });
+  const pngPath = path.join(dir, `${id}.png`);
+  await fsp.writeFile(pngPath, pngBuffer);
+  return { id, pngPath, size, bytes: pngBuffer.byteLength };
 }
 
 /**

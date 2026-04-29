@@ -37,6 +37,7 @@ export const IPC = {
   // direct-chat (no capture)
   chat: {
     start: 'chat:start',
+    sendComposed: 'chat:sendComposed',
   },
   // settings (P5)
   settings: {
