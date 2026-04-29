@@ -42,3 +42,4 @@ test-results/
 resources/icon.iconset/
 *.traineddata
 /tmp/glint-bundle.log
+.diag/

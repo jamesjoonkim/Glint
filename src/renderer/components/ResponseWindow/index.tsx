@@ -17,14 +17,25 @@ export function ResponseWindow(): JSX.Element {
   const stream = useStream(streamId);
 
   useEffect(() => {
-    const offStream = window.glint?.subscribe?.(
+    // Wrap subscribe calls so a single allowlist mismatch (or any throw)
+    // doesn't abort the whole effect — that would leave React without
+    // cleanup and the response window in a half-mounted state.
+    const safeSubscribe = (channel: string, fn: (e: unknown, p: unknown) => void) => {
+      try {
+        return window.glint?.subscribe?.(channel, fn);
+      } catch (err) {
+        console.error(`subscribe failed for ${channel}:`, err);
+        return undefined;
+      }
+    };
+    const offStream = safeSubscribe(
       'response:set-stream',
       (_e: unknown, payload: unknown) => {
         const id = (payload as { streamId?: unknown })?.streamId;
         if (typeof id === 'string') setStreamId(id);
       },
     );
-    const offThread = window.glint?.subscribe?.(
+    const offThread = safeSubscribe(
       'response:set-thread',
       (_e: unknown, payload: unknown) => {
         const id = (payload as { threadId?: unknown })?.threadId;

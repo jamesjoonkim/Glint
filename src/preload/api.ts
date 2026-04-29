@@ -12,6 +12,7 @@ const PUSH_CHANNELS = new Set<string>([
   'model:stream:done',
   'model:stream:error',
   'response:set-stream',
+  'response:set-thread',
 ]);
 
 const api = Object.freeze({
