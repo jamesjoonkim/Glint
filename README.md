@@ -77,6 +77,22 @@ The privacy promise is **enforced at lint and runtime**, not just claimed:
 
 After a one-time model download (~12 GB), the app makes zero outbound network calls during normal operation.
 
+### One opt-in exception: web search
+
+Glint can autonomously call out to the web when the model decides it needs current information (recent news, prices, breaking events). This is **off by default** because it breaks the local-only promise — the search query travels to the configured backend. To enable, edit `~/Library/Application Support/Glint/settings.json`:
+
+```jsonc
+{
+  "webSearch": {
+    "enabled": true,
+    "tavilyApiKey": "tvly-…",   // get a free key at https://tavily.com
+    "maxIterations": 2          // cap on tool-loop rounds per send
+  }
+}
+```
+
+When the model invokes a search, the response window shows a `searching the web · <query>` banner so the leak is always visible. Settings UI ships in a future release; for now, the JSON file is the source of truth.
+
 ## Install
 
 > v2 is pre-alpha. Signed DMGs ship after the first-run wizard lands. v1 (cloud GPT-4V) DMGs remain on the [Releases page](https://github.com/jamesjoonkim/Glint/releases).
@@ -174,9 +190,16 @@ tests/e2e/           # Playwright on a packaged build
 - [x] Custom `glint-asset://` protocol for safe in-renderer image loading
 - [x] Multi-turn chat — text-route and vision-route follow-ups
 - [x] Image-in-replay (original screenshot rendered as the first chat turn)
+- [x] Direct chat mode (`⌘⇧Z`) for question-answering without a screenshot
+- [x] Captures / Chats tabs in the dashboard with per-tab search
+- [x] In-chat image attachments — paste, drag, or marquee-capture into the active thread
+- [x] Multi-image composed turns — bundle N images + text into one assistant response
+- [x] Stop-button mid-stream + partial-answer persistence
+- [x] Opt-in web search via Tavily with autonomous tool-call loop
 - [ ] First-run wizard for model download
 - [ ] Semantic search over OCR text and assistant turns (sqlite-vss)
-- [ ] Settings UI for model selection, hotkey rebinding, log retention
+- [ ] Settings UI for web search, model selection, hotkey rebinding, log retention
+- [ ] Image fetch from web search (download top results into composed-turn context)
 - [ ] Signed DMG + optional auto-update (off by default)
 
 v1 (cloud GPT-4V) is preserved at the [`v1-final` tag](https://github.com/jamesjoonkim/Glint/tree/v1-final) for reference.

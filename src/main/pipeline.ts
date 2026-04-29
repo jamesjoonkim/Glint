@@ -326,15 +326,19 @@ async function streamWithToolDetection(
   for await (const tok of stream) {
     answer += tok;
 
-    if (toolsEnabled && !decided) {
+    if (!toolsEnabled) {
+      // Tools off → straight passthrough. No buffering needed.
+      send('model:stream:token', { id: streamId, chunk: tok });
+      continue;
+    }
+
+    if (!decided) {
       buffer += tok;
-      // Decide once we've seen enough to know.
       if (buffer.length >= 120 || buffer.includes('>')) {
         const trimmed = buffer.trimStart();
         if (trimmed.startsWith('<tool_call>')) {
           suppressed = true;
         } else {
-          // Not a tool call — flush what we've buffered.
           send('model:stream:token', { id: streamId, chunk: buffer });
         }
         decided = true;
@@ -342,14 +346,11 @@ async function streamWithToolDetection(
       continue;
     }
 
-    if (suppressed) continue; // keep accumulating into `answer`, don't emit
-
-    if (decided) {
-      send('model:stream:token', { id: streamId, chunk: tok });
-    }
+    if (suppressed) continue; // accumulate into `answer`, don't emit
+    send('model:stream:token', { id: streamId, chunk: tok });
   }
 
-  // If stream ended before we decided (very short response), flush remainder.
+  // Stream ended before we decided (very short response).
   if (!decided && !suppressed && buffer) {
     send('model:stream:token', { id: streamId, chunk: buffer });
   }
@@ -460,21 +461,22 @@ export async function runComposedTurn(args: {
       ];
     }
 
-    let answer = '';
-    const onTok = (chunk: string) => {
-      answer += chunk;
-      send('model:stream:token', { id: streamId, chunk });
-    };
-
     log.info(
       { threadId: args.threadId, images: args.pngPaths.length, hasText: !!args.text, useVision },
       'composed turn dispatch',
     );
-    const stream = streamCompletion(cfg, { model, messages }, controller.signal);
-    for await (const tok of stream) onTok(tok);
+
+    const finalAnswer = await streamWithToolLoop({
+      cfg,
+      model,
+      messages,
+      streamId,
+      controller,
+      send,
+    });
 
     const aborted = controller.signal.aborted;
-    const final = aborted && answer ? `${answer}\n\n_[stopped]_` : answer;
+    const final = aborted && finalAnswer ? `${finalAnswer}\n\n_[stopped]_` : finalAnswer;
     if (final) appendTurn(args.threadId, 'assistant', final, model);
     send('model:stream:done', { id: streamId });
   } catch (err) {
