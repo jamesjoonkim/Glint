@@ -8,6 +8,11 @@ export type SearchResult = {
   content: string;
 };
 
+export type SearchResponse = {
+  results: SearchResult[];
+  images: string[];
+};
+
 export type ToolCall = {
   name: string;
   arguments: Record<string, unknown>;
@@ -58,15 +63,17 @@ function parseJson(body: string): ToolCall | null {
 }
 
 /**
- * Execute a Tavily search. Returns a list of results suitable for feeding
- * back to the model as a `<tool_response>` user turn.
+ * Execute a Tavily search. Returns text results AND image URLs (when
+ * include_images is requested). Caller decides what to do with the images
+ * — the pipeline downloads top N for vision-route follow-ups.
  */
 export async function tavilySearch(
   query: string,
   apiKey: string,
-  maxResults: number = 5,
-  signal?: AbortSignal,
-): Promise<SearchResult[]> {
+  options: { maxResults?: number; includeImages?: boolean; signal?: AbortSignal } = {},
+): Promise<SearchResponse> {
+  const maxResults = options.maxResults ?? 5;
+  const includeImages = options.includeImages ?? true;
   const res = await fetch('https://api.tavily.com/search', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -76,14 +83,18 @@ export async function tavilySearch(
       max_results: maxResults,
       search_depth: 'basic',
       include_answer: false,
+      include_images: includeImages,
     }),
-    signal,
+    signal: options.signal,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`tavily ${res.status} ${res.statusText}: ${text.slice(0, 200)}`);
   }
-  const data = (await res.json()) as { results?: Array<Partial<SearchResult>> };
+  const data = (await res.json()) as {
+    results?: Array<Partial<SearchResult>>;
+    images?: Array<string | { url?: string }>;
+  };
   const results = (data.results ?? [])
     .filter((r) => typeof r.title === 'string' && typeof r.url === 'string')
     .map((r) => ({
@@ -92,14 +103,52 @@ export async function tavilySearch(
       content: typeof r.content === 'string' ? r.content : '',
     }))
     .slice(0, maxResults);
-  log.info({ query, count: results.length }, 'tavily search complete');
-  return results;
+  // Tavily images can be either string[] or {url}[] depending on plan/version.
+  const images = (data.images ?? [])
+    .map((i) => (typeof i === 'string' ? i : i?.url))
+    .filter((u): u is string => typeof u === 'string' && /^https?:\/\//.test(u));
+  log.info(
+    { query, results: results.length, images: images.length },
+    'tavily search complete',
+  );
+  return { results, images };
+}
+
+/**
+ * Download an image URL and return its raw bytes. Caps at 10MB per image,
+ * 8s timeout. Returns null on any failure — caller continues without that
+ * image rather than aborting the whole tool loop.
+ */
+export async function fetchImageBytes(
+  url: string,
+  signal?: AbortSignal,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  // Combine caller's abort with our timeout.
+  const onParentAbort = () => ctrl.abort();
+  signal?.addEventListener('abort', onParentAbort);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.startsWith('image/')) return null;
+    const ab = await res.arrayBuffer();
+    if (ab.byteLength > 10 * 1024 * 1024) return null;
+    return { bytes: Buffer.from(ab), contentType: ct };
+  } catch (err) {
+    log.warn({ err: String(err), url }, 'image fetch failed');
+    return null;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onParentAbort);
+  }
 }
 
 /** System-prompt fragment that teaches the model the tool format. */
 export const WEB_SEARCH_TOOL_PROMPT = `You have access to one tool: \`web_search\`.
 
-When you need information that may have changed since training, or facts you don't reliably know (current events, prices, recent papers, breaking news), call the tool by outputting EXACTLY this format on its own:
+When you need information from the live web — current events, prices, recent papers, breaking news, OR pictures/images of something the user asked to see — call the tool by outputting EXACTLY this format on its own:
 
 <tool_call>
 {"name": "web_search", "arguments": {"query": "<short focused query>"}}
@@ -108,5 +157,6 @@ When you need information that may have changed since training, or facts you don
 Rules:
 - Output the tool_call ALONE — no prose before or after.
 - Use the tool only when truly needed; for general knowledge questions answer from your training data.
+- For "show me a picture/photo/image of X" requests, ALWAYS call web_search with X as the query — the tool returns image results that the user will see.
 - Keep queries short (under 10 words).
-- After the tool returns results in a \`<tool_response>\` block, answer the user's question using those results, citing source titles inline like (TechCrunch).`;
+- After the tool returns results in a \`<tool_response>\` block (and any attached images), answer the user's question using them. Cite source titles inline like (TechCrunch). When images came back, briefly describe what they show.`;

@@ -28,6 +28,7 @@ import { classifyTags } from '../core/threads/tags.js';
 import { generateTitle } from '../core/threads/titles.js';
 import { getSettings } from './settings.js';
 import {
+  fetchImageBytes,
   parseToolCall,
   tavilySearch,
   WEB_SEARCH_TOOL_PROMPT,
@@ -132,6 +133,7 @@ export async function continueThread(
       streamId,
       controller,
       send,
+      deps,
     });
 
     const aborted = controller.signal.aborted;
@@ -224,23 +226,29 @@ async function streamWithToolLoop(args: {
   streamId: string;
   controller: AbortController;
   send: (channel: string, payload: unknown) => void;
+  /** Pipeline deps so the tool-loop can hot-swap to the vision endpoint
+   *  when search returns images. */
+  deps: PipelineDeps;
 }): Promise<string> {
   const settings = getSettings();
   const webSearchOn =
     settings.webSearch.enabled && !!settings.webSearch.tavilyApiKey;
   const maxIterations = Math.max(1, settings.webSearch.maxIterations);
 
-  // System prompt is at index 0; inject the tool prompt as a follow-up
-  // system message when web search is on, so the model knows the format.
   const messages: Message[] = webSearchOn
     ? injectToolPrompt(args.messages)
     : args.messages;
 
+  // Active client/model can flip from text → vision mid-loop when an
+  // image-bearing search result arrives.
+  let activeCfg = args.cfg;
+  let activeModel = args.model;
+
   let lastVisibleAnswer = '';
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     const { answer, suppressed } = await streamWithToolDetection(
-      args.cfg,
-      { model: args.model, messages },
+      activeCfg,
+      { model: activeModel, messages },
       args.controller.signal,
       args.streamId,
       args.send,
@@ -248,16 +256,10 @@ async function streamWithToolLoop(args: {
     );
 
     if (args.controller.signal.aborted) return suppressed ? '' : answer;
+    if (!suppressed) return answer;
 
-    if (!suppressed) {
-      // Normal answer — done.
-      return answer;
-    }
-
-    // Tool call detected. Parse + execute.
     const tc = parseToolCall(answer);
     if (!tc || tc.name !== 'web_search') {
-      // Could not parse — show the raw answer to the user as a fallback.
       args.send('model:stream:token', { id: args.streamId, chunk: answer });
       return answer;
     }
@@ -274,13 +276,15 @@ async function streamWithToolLoop(args: {
     log.info({ query, iteration }, 'web_search tool dispatch');
 
     let results: SearchResult[];
+    let imageUrls: string[];
     try {
-      results = await tavilySearch(
-        query,
-        settings.webSearch.tavilyApiKey!,
-        5,
-        args.controller.signal,
-      );
+      const resp = await tavilySearch(query, settings.webSearch.tavilyApiKey!, {
+        maxResults: 5,
+        includeImages: true,
+        signal: args.controller.signal,
+      });
+      results = resp.results;
+      imageUrls = resp.images.slice(0, 3);
     } catch (err) {
       log.warn({ err: String(err), query }, 'tavily search failed');
       const failureNote = `_[web search failed: ${String(err).slice(0, 120)}]_`;
@@ -288,16 +292,44 @@ async function streamWithToolLoop(args: {
       return failureNote;
     }
 
-    // Append the model's tool call + the tool response, then re-prompt.
+    // Download top images concurrently. Failures are skipped — we feed back
+    // whichever ones came down successfully.
+    const imageParts: ImagePart[] = [];
+    if (imageUrls.length > 0 && args.deps.visionUrl) {
+      const downloaded = await Promise.all(
+        imageUrls.map((u) => fetchImageBytes(u, args.controller.signal)),
+      );
+      for (const d of downloaded) {
+        if (!d) continue;
+        const b64 = d.bytes.toString('base64');
+        imageParts.push({
+          type: 'image_url',
+          image_url: { url: `data:${d.contentType};base64,${b64}` },
+        });
+      }
+      if (imageParts.length > 0) {
+        log.info({ count: imageParts.length }, 'attached search images');
+        // Hot-swap to vision so the model can see what came back.
+        activeCfg = { baseUrl: args.deps.visionUrl ?? args.cfg.baseUrl };
+        activeModel = args.deps.visionModel;
+      }
+    }
+
+    // Append the model's tool call response, then the tool result. When
+    // we have images, the user turn is multimodal: text JSON + image_urls.
     messages.push({ role: 'assistant', content: answer });
-    messages.push({
-      role: 'user',
-      content: `<tool_response>\n${JSON.stringify(results, null, 2)}\n</tool_response>`,
-    });
+    const responseText = `<tool_response>\n${JSON.stringify(results, null, 2)}\n</tool_response>`;
+    if (imageParts.length > 0) {
+      messages.push({
+        role: 'user',
+        content: [{ type: 'text', text: responseText }, ...imageParts],
+      });
+    } else {
+      messages.push({ role: 'user', content: responseText });
+    }
     lastVisibleAnswer = '';
   }
 
-  // Hit iteration cap.
   const note = '\n\n_[hit web_search iteration cap; answering from what we have]_';
   args.send('model:stream:token', { id: args.streamId, chunk: note });
   return lastVisibleAnswer + note;
@@ -473,6 +505,7 @@ export async function runComposedTurn(args: {
       streamId,
       controller,
       send,
+      deps,
     });
 
     const aborted = controller.signal.aborted;

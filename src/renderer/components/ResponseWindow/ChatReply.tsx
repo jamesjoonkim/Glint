@@ -159,7 +159,7 @@ export function ChatReply({
     : dragging
       ? 'drop image to attach'
       : disabled
-        ? 'wait for the answer to finish…'
+        ? 'queue the next message…'
         : 'ask a follow-up · paste or drop an image';
 
   return (
@@ -228,11 +228,19 @@ export function ChatReply({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
+              // While streaming (disabled=true), Enter is a no-op so the
+              // user can draft the next message. Send unlocks once the
+              // current stream completes.
+              if (disabled) return;
               void submit();
             }
           }}
           onPaste={onPaste}
-          disabled={disabled || sending}
+          // Don't disable during streaming — only during our own image
+          // upload IPC roundtrip (sending). The send button is already
+          // swapped for stop (via the streaming prop), so accidental
+          // sends mid-stream aren't possible.
+          disabled={sending}
           aria-label="reply input"
         />
         {streaming ? (
