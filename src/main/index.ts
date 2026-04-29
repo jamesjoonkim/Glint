@@ -1,7 +1,10 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, nativeImage } from 'electron';
 import path from 'node:path';
 import os from 'node:os';
+import { promises as fsp } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { createLogger } from '../core/logger/index.js';
+import type { CaptureRecord } from './capture.js';
 import {
   registerAssetSchemePrivileged,
   registerAssetProtocolHandler,
@@ -24,7 +27,7 @@ process.on('unhandledRejection', (e) => {
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
 import { closeOverlay, openOverlay } from './windows/overlay.js';
 import { openHistory } from './windows/history.js';
-import { onResponseClosed, openResponse } from './windows/response.js';
+import { hideResponseWindow, onResponseClosed, openResponse } from './windows/response.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
@@ -124,8 +127,67 @@ function wireIpc(): void {
     if (!granted) return { ok: false, error: 'screen recording denied' };
     // Stash the target thread; capture:request consumes it on the next call.
     pendingCaptureThreadId = threadId;
+    // Hide the response window so the chat isn't in the captured frame.
+    // openResponse() will re-show it once startStream fires after capture.
+    hideResponseWindow();
     openOverlay();
     return { ok: true };
+  });
+
+  ipcMain.handle('capture:attachImage', async (_e, payload: unknown) => {
+    const threadId = (payload as { threadId?: unknown })?.threadId;
+    const dataUrl = (payload as { dataUrl?: unknown })?.dataUrl;
+    if (typeof threadId !== 'string') return { ok: false, error: 'invalid threadId' };
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+      return { ok: false, error: 'invalid dataUrl' };
+    }
+    const comma = dataUrl.indexOf(',');
+    const base64 = comma >= 0 ? dataUrl.slice(comma + 1) : '';
+    if (!base64) return { ok: false, error: 'malformed dataUrl' };
+
+    let pngBuffer: Buffer;
+    let width: number;
+    let height: number;
+    try {
+      const raw = Buffer.from(base64, 'base64');
+      // Hard cap: 25MB. Same DoS posture as desktopCapturer captures.
+      if (raw.byteLength > 25 * 1024 * 1024) {
+        return { ok: false, error: 'image too large' };
+      }
+      const native = nativeImage.createFromBuffer(raw);
+      if (native.isEmpty()) return { ok: false, error: 'unrecognized image' };
+      const size = native.getSize();
+      width = size.width;
+      height = size.height;
+      // Re-encode through nativeImage so we always write PNG, even if the
+      // user pasted JPEG/HEIC/etc. Downstream OCR + thumbnail expect PNG.
+      pngBuffer = native.toPNG();
+    } catch (err) {
+      log.warn({ err: String(err) }, 'attachImage decode failed');
+      return { ok: false, error: 'decode failed' };
+    }
+
+    const id = randomUUID();
+    const dir = resolveCapturesDir();
+    await fsp.mkdir(dir, { recursive: true });
+    const pngPath = path.join(dir, `${id}.png`);
+    await fsp.writeFile(pngPath, pngBuffer);
+    log.info({ id, threadId, width, height, bytes: pngBuffer.byteLength }, 'image attached');
+
+    const record: CaptureRecord = {
+      id,
+      pngPath,
+      bbox: { x: 0, y: 0, width, height, displayId: 0 },
+      displayId: 0,
+      byteSize: pngBuffer.byteLength,
+    };
+
+    const streamId = startStream();
+    void (async () => {
+      await Promise.allSettled([textRuntimePromise, visionRuntimePromise]);
+      return runPipeline(record, streamId, getPipelineDeps(), threadId);
+    })();
+    return { ok: true, id, streamId };
   });
 
   ipcMain.handle('capture:request', async (_e, bbox: CaptureBBox) => {

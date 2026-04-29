@@ -553,6 +553,11 @@
   opacity: 0.55;
   cursor: not-allowed;
 }
+.replyRow[data-dragging] {
+  border-color: var(--spark);
+  background: rgba(245, 185, 69, 0.08);
+  box-shadow: 0 0 0 3px rgba(245, 185, 69, 0.18);
+}
 
 .replyAttach {
   flex: 0 0 auto;

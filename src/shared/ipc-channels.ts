@@ -9,6 +9,7 @@ export const IPC = {
     cancel: 'capture:cancel',
     result: 'capture:result',
     openForThread: 'capture:openForThread',
+    attachImage: 'capture:attachImage',
   },
   // model runtime (P1+)
   model: {

@@ -23,6 +23,10 @@ export function onResponseClosed(fn: () => void): () => void {
 export function openResponse(streamId: string): BrowserWindow {
   if (response && !response.isDestroyed()) {
     response.webContents.send('response:set-stream', { streamId });
+    // Reuse path: show() before focus() — focus alone won't unhide a window
+    // we hid earlier (e.g., before opening the marquee overlay so the chat
+    // wasn't in the screenshot frame).
+    if (!response.isVisible()) response.show();
     response.focus();
     return response;
   }
@@ -66,4 +70,16 @@ export function openResponse(streamId: string): BrowserWindow {
 
 export function getResponseWindow(): BrowserWindow | null {
   return response && !response.isDestroyed() ? response : null;
+}
+
+/**
+ * Hide the response window without destroying it — used during in-chat
+ * screenshot capture so the chat isn't visible in the captured frame.
+ * The window is shown again automatically when openResponse is next
+ * called for any stream id (see show() in the reuse branch above).
+ */
+export function hideResponseWindow(): void {
+  if (response && !response.isDestroyed() && response.isVisible()) {
+    response.hide();
+  }
 }
