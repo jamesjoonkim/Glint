@@ -18,11 +18,13 @@ build/python/dist/
 *.pyc
 __pycache__/
 
-# user data (created at runtime, never committed)
+# user data (created at runtime in ~/Library/Application Support/Glint/, not
+# in the repo). The leading slash anchors these to the repo root so they
+# can't accidentally shadow source dirs like src/core/models/.
 glint.db
-captures/
-models/
-logs/
+/captures/
+/models/
+/logs/
 
 # coverage + test artifacts
 coverage/
