@@ -7,15 +7,17 @@
  */
 
 .root {
-  --ink: #0d0e12;
+  --ink: #0a0b0f;
   --ink-2: #14161c;
   --ink-3: #1c1f27;
   --hairline: #232732;
+  --hairline-strong: #2c3140;
   --paper: #ece6d8;
   --paper-2: #c8c2b3;
   --paper-3: #8a8579;
   --accent: #c9a96e;
-  --accent-soft: rgba(201, 169, 110, 0.16);
+  --accent-soft: rgba(201, 169, 110, 0.18);
+  --accent-glow: rgba(201, 169, 110, 0.28);
 
   --serif: 'New York', 'Charter', ui-serif, Georgia, 'Times New Roman', serif;
   --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
@@ -25,9 +27,6 @@
   flex-direction: column;
   height: 100vh;
   background: var(--ink);
-  background-image:
-    radial-gradient(circle at 0% 0%, rgba(201, 169, 110, 0.05), transparent 40%),
-    radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.04), transparent 50%);
   color: var(--paper);
   font-family: var(--sans);
 }
