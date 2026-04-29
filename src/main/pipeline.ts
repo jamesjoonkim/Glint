@@ -7,6 +7,7 @@ import {
   buildVisionMessage,
   streamCompletion,
   type ClientConfig,
+  type Message,
 } from '../core/models/client.js';
 import type { CaptureRecord } from './capture.js';
 import { openResponse, getResponseWindow } from './windows/response.js';
@@ -89,36 +90,82 @@ export async function continueThread(
 
   try {
     const turns = getTurns(threadId);
-    const systemPrompt = await loadPrompt('answer-text');
-    const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
+    const capture = findCapturesForThread(threadId);
+    // Vision-route follow-ups need the actual image, not just OCR. Per Qwen3-VL
+    // guidance the image goes on the FIRST user turn only — the model retains
+    // visual context through the conversation history without re-attachment.
+    const useVision =
+      capture?.route === 'vision' &&
+      !!deps.visionUrl &&
+      capture.png_path;
 
-    // Reconstruct the conversation: original capture context as the first
-    // user turn, then the prior turns, then nothing extra (the user message
-    // is already the last turn after appendTurn above).
-    const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
-      { role: 'system', content: systemPrompt },
-    ];
-    // Find the OCR text from the capture associated with this thread.
-    const captures = findCapturesForThread(threadId);
-    if (captures && captures.ocr_text) {
-      messages.push({
-        role: 'user',
-        content: `Original capture (${captures.ocr_text.length} chars OCR):\n\n${captures.ocr_text}`,
-      });
-    }
-    for (const t of turns) {
-      messages.push({ role: t.role, content: t.content });
-    }
+    const { cfg, model, messages } = useVision
+      ? await buildVisionFollowupRequest(capture!, turns, deps)
+      : await buildTextFollowupRequest(capture, turns, deps);
 
-    const stream = streamCompletion(cfg, { model: deps.textModel, messages });
+    const stream = streamCompletion(cfg, { model, messages });
     for await (const tok of stream) onTok(tok);
-    send('model:stream:done', { id: streamId });
 
-    appendTurn(threadId, 'assistant', answer, deps.textModel);
+    // Persist the assistant turn BEFORE notifying done — see runPipeline for
+    // the race-condition rationale.
+    appendTurn(threadId, 'assistant', answer, useVision ? deps.visionModel : deps.textModel);
+    send('model:stream:done', { id: streamId });
   } catch (err) {
     log.error({ err: String(err), threadId }, 'continue thread failed');
     send('model:stream:error', { id: streamId, error: String(err) });
   }
+}
+
+/**
+ * Build the message array for a text-route follow-up. The original screenshot's
+ * OCR transcription stands in for visual context — fine when the capture is
+ * dense text and the OCR is reliable.
+ */
+export async function buildTextFollowupRequest(
+  capture: { ocr_text: string | null } | null,
+  turns: Array<{ role: 'user' | 'assistant'; content: string }>,
+  deps: PipelineDeps,
+): Promise<{ cfg: ClientConfig; model: string; messages: Message[] }> {
+  const systemPrompt = await loadPrompt('answer-text');
+  const cfg: ClientConfig = { baseUrl: deps.textUrl ?? 'http://127.0.0.1:8765' };
+  const messages: Message[] = [{ role: 'system', content: systemPrompt }];
+  if (capture?.ocr_text) {
+    messages.push({
+      role: 'user',
+      content: `Original capture (${capture.ocr_text.length} chars OCR):\n\n${capture.ocr_text}`,
+    });
+  }
+  for (const t of turns) messages.push({ role: t.role, content: t.content });
+  return { cfg, model: deps.textModel, messages };
+}
+
+/**
+ * Build the message array for a vision-route follow-up. Mirrors what
+ * `runVisionRoute` sent for the initial answer: same system prompt, same
+ * framing question, same image. The assistant's first response and any
+ * subsequent exchanges follow as plain text turns.
+ *
+ * Per Qwen3-VL upstream guidance, the image is attached only on the first
+ * user turn; the processor's chat template keeps visual tokens in the prompt
+ * for every subsequent generation.
+ */
+export async function buildVisionFollowupRequest(
+  capture: { png_path: string },
+  turns: Array<{ role: 'user' | 'assistant'; content: string }>,
+  deps: PipelineDeps,
+): Promise<{ cfg: ClientConfig; model: string; messages: Message[] }> {
+  const systemPrompt = await loadPrompt('answer-vision');
+  const cfg: ClientConfig = { baseUrl: deps.visionUrl ?? 'http://127.0.0.1:8766' };
+  const initialUserMsg = await buildVisionMessage(
+    capture.png_path,
+    'What is on screen? Lead with one sentence describing the image, then explain anything actionable.',
+  );
+  const messages: Message[] = [
+    { role: 'system', content: systemPrompt },
+    initialUserMsg,
+  ];
+  for (const t of turns) messages.push({ role: t.role, content: t.content });
+  return { cfg, model: deps.visionModel, messages };
 }
 
 function findCapturesForThread(threadId: string) {
@@ -193,14 +240,20 @@ export async function runPipeline(
       }
       await runTextRoute(capture, ocr, streamId, deps, onTok);
     }
-    send('model:stream:done', { id: streamId });
 
+    // Persist the assistant turn BEFORE notifying done — the renderer reacts
+    // to done by refetching turns, and we don't want that fetch to race the
+    // DB write. better-sqlite3 is synchronous so this is microseconds.
     if (dbCaptureId && dbThreadId) {
       try {
         appendTurn(dbThreadId, 'assistant', answer, deps.textModel);
       } catch (err) {
         log.warn({ err: String(err) }, 'append assistant turn failed');
       }
+    }
+    send('model:stream:done', { id: streamId });
+
+    if (dbCaptureId && dbThreadId) {
       // Async post-save: thumbnail, tags, title. None block the user.
       void postSaveBackground({
         captureId: dbCaptureId,
