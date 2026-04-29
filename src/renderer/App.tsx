@@ -1,6 +1,20 @@
 import styles from './App.module.css';
+import { SelectionOverlay } from './components/SelectionOverlay/index.js';
+
+function getView(): string {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('view') ?? 'main';
+}
 
 export function App(): JSX.Element {
+  const view = getView();
+
+  if (view === 'overlay') return <SelectionOverlay />;
+  if (view === 'response') return <div>Response (P1 Day 7)</div>;
+  if (view === 'history') return <div>History (P3)</div>;
+  if (view === 'settings') return <div>Settings (P5)</div>;
+  if (view === 'first-run') return <div>First-Run Wizard (P5)</div>;
+
   return (
     <div className={styles.shell}>
       <header className={styles.header}>
@@ -10,7 +24,7 @@ export function App(): JSX.Element {
       <main className={styles.main}>
         <h1 className={styles.title}>Bootstrap OK</h1>
         <p className={styles.body}>
-          P0 scaffold is live. Hotkey, capture, OCR, MLX runtime, and history land in P1+.
+          P0 + P1 hotkey scaffold live. Press <code>⌘⇧X</code> to test the marquee overlay.
         </p>
         <code className={styles.code}>⌘⇧X · ⌘⇧H · ⌘,</code>
       </main>

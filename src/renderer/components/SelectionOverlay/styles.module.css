@@ -1,0 +1,47 @@
+.root {
+  position: fixed;
+  inset: 0;
+  cursor: crosshair;
+  background: rgba(15, 23, 42, 0.18);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-app-region: no-drag;
+}
+
+.hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  padding: 8px 14px;
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+.selection {
+  position: absolute;
+  border: 1.5px solid #93c5fd;
+  background: rgba(147, 197, 253, 0.12);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.4), 0 8px 24px -8px rgba(15, 23, 42, 0.4);
+  pointer-events: none;
+}
+
+.dim {
+  position: absolute;
+  bottom: -28px;
+  left: 0;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: #f8fafc;
+  background: rgba(15, 23, 42, 0.85);
+  padding: 3px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
