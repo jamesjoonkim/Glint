@@ -37,6 +37,7 @@ import {
   getTurns,
   listChatThreads,
   listRecent,
+  searchChatThreads,
   openStore,
   searchKeyword,
   type CaptureRow,
@@ -165,6 +166,10 @@ function wireIpc(): void {
   );
 
   ipcMain.handle('history:listChats', () => listChatThreads(200));
+
+  ipcMain.handle('history:searchChats', (_e, query: unknown) =>
+    searchChatThreads(typeof query === 'string' ? query : '', 200),
+  );
 
   ipcMain.handle('history:openThread', (_e, payload: unknown) => {
     const threadId = (payload as { threadId?: unknown })?.threadId;

@@ -248,6 +248,52 @@ export function listChatThreads(limit: number = 100): ChatThreadSummary[] {
     .all(limit) as ChatThreadSummary[];
 }
 
+/**
+ * FTS5 keyword search across chat threads — matches against the title
+ * and any turn content. Same anti-join (LEFT JOIN captures … IS NULL)
+ * to keep this scoped to capture-less threads. Empty query falls back
+ * to listChatThreads.
+ */
+export function searchChatThreads(
+  query: string,
+  limit: number = 100,
+): ChatThreadSummary[] {
+  const safe = query.replace(/["*]/g, '').trim();
+  if (!safe) return listChatThreads(limit);
+
+  return getDb()
+    .prepare<unknown[], ChatThreadSummary>(
+      `SELECT
+         t.id          AS id,
+         t.created_at  AS createdAt,
+         t.title       AS title,
+         (SELECT content FROM turns
+            WHERE thread_id = t.id AND role = 'user'
+            ORDER BY created_at ASC LIMIT 1) AS preview,
+         (SELECT COUNT(*) FROM turns WHERE thread_id = t.id) AS turnCount,
+         (SELECT MAX(created_at) FROM turns WHERE thread_id = t.id) AS lastTurnAt
+       FROM threads t
+       LEFT JOIN captures c ON c.thread_id = t.id
+       WHERE c.id IS NULL
+         AND (
+           LOWER(COALESCE(t.title, '')) LIKE LOWER(?) OR
+           EXISTS (
+             SELECT 1
+             FROM turns_fts f
+             JOIN turns tu ON tu.rowid = f.rowid
+             WHERE turns_fts MATCH ?
+               AND tu.thread_id = t.id
+           )
+         )
+       ORDER BY COALESCE(
+         (SELECT MAX(created_at) FROM turns WHERE thread_id = t.id),
+         t.created_at
+       ) DESC
+       LIMIT ?`,
+    )
+    .all(`%${safe}%`, safe, limit) as ChatThreadSummary[];
+}
+
 export function getTurns(threadId: string): TurnRow[] {
   return getDb()
     .prepare<unknown[], TurnRow>(

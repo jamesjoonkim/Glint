@@ -125,14 +125,15 @@ export function HistoryPanel(): JSX.Element {
             placeholder={
               showingCaptures
                 ? 'Search captures, OCR, tags…'
-                : 'Search chats — coming soon'
+                : 'Search chats by title or message…'
             }
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && showingCaptures) void captures.load(q);
+              if (e.key !== 'Enter') return;
+              if (showingCaptures) void captures.load(q);
+              else void chats.load(q);
             }}
-            disabled={!showingCaptures}
             aria-label="Search"
           />
           <span className={styles.hint}>

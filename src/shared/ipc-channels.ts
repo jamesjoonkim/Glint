@@ -22,6 +22,7 @@ export const IPC = {
     search: 'history:search',
     open: 'history:open',
     listChats: 'history:listChats',
+    searchChats: 'history:searchChats',
     openThread: 'history:openThread',
   },
   // threads (P4+)
