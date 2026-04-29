@@ -209,6 +209,45 @@ export function getThread(id: string): ThreadRow | null {
   );
 }
 
+/**
+ * List "chat-only" threads — threads that were started via ⌘⇧Z (or
+ * chat:start) and never had a capture attached. The dashboard renders
+ * these in the Chats tab. Each row carries a preview = first user turn,
+ * and a turnCount so the card can show "12 turns".
+ */
+export type ChatThreadSummary = {
+  id: string;
+  createdAt: number;
+  title: string | null;
+  preview: string | null;
+  turnCount: number;
+  lastTurnAt: number | null;
+};
+
+export function listChatThreads(limit: number = 100): ChatThreadSummary[] {
+  return getDb()
+    .prepare<unknown[], ChatThreadSummary>(
+      `SELECT
+         t.id          AS id,
+         t.created_at  AS createdAt,
+         t.title       AS title,
+         (SELECT content FROM turns
+            WHERE thread_id = t.id AND role = 'user'
+            ORDER BY created_at ASC LIMIT 1) AS preview,
+         (SELECT COUNT(*) FROM turns WHERE thread_id = t.id) AS turnCount,
+         (SELECT MAX(created_at) FROM turns WHERE thread_id = t.id) AS lastTurnAt
+       FROM threads t
+       LEFT JOIN captures c ON c.thread_id = t.id
+       WHERE c.id IS NULL
+       ORDER BY COALESCE(
+         (SELECT MAX(created_at) FROM turns WHERE thread_id = t.id),
+         t.created_at
+       ) DESC
+       LIMIT ?`,
+    )
+    .all(limit) as ChatThreadSummary[];
+}
+
 export function getTurns(threadId: string): TurnRow[] {
   return getDb()
     .prepare<unknown[], TurnRow>(

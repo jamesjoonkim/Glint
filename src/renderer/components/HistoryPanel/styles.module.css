@@ -323,3 +323,123 @@
   letter-spacing: 0.14em;
   color: var(--paper-3);
 }
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  gap: 24px;
+  padding: 0 44px;
+  border-bottom: 1px solid var(--hairline);
+  -webkit-app-region: no-drag;
+}
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  border: none;
+  padding: 14px 0;
+  margin-bottom: -1px; /* underline overlaps the bottom border */
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--paper-3);
+  transition: color 200ms ease;
+}
+.tab:hover {
+  color: var(--paper-2);
+}
+.tabActive {
+  color: var(--paper);
+  border-bottom: 1px solid var(--accent);
+}
+.tabCount {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--paper-3);
+  background: var(--ink-2);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 2px 8px;
+  letter-spacing: 0.08em;
+}
+.tabActive .tabCount {
+  color: var(--paper);
+  border-color: var(--hairline-strong);
+}
+
+/* ---------- Chat list ---------- */
+
+.chatList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 18px;
+}
+
+.chatCard {
+  flex-direction: column;
+  align-items: stretch;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 18px 20px;
+  transition: border-color 200ms ease, transform 200ms ease;
+}
+.chatCard:hover {
+  border-color: var(--accent-soft);
+  transform: translateY(-1px);
+}
+.chatCard:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chatBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.chatBadge {
+  align-self: flex-start;
+  font-family: var(--mono);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid rgba(201, 169, 110, 0.22);
+  border-radius: 2px;
+  padding: 2px 8px;
+}
+
+.chatTitle {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 18px;
+  line-height: 1.3;
+  color: var(--paper);
+  letter-spacing: -0.005em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.chatPreview {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--paper-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
