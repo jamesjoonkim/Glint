@@ -5,6 +5,10 @@
 interface GlintWindowApi {
   ping: () => Promise<'pong'>;
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
+  subscribe: (
+    channel: string,
+    listener: (event: unknown, payload: unknown) => void,
+  ) => () => void;
 }
 
 interface Window {

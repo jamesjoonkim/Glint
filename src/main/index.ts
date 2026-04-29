@@ -5,6 +5,9 @@ import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.j
 import { closeOverlay, openOverlay } from './windows/overlay.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
+import { setPromptsDir } from '../core/models/prompts.js';
+import { runPipeline, startStream } from './pipeline.js';
+import { destroyWorker } from '../core/ocr/tesseract.js';
 import type { CaptureBBox } from '../shared/types.js';
 
 const log = createLogger('main');
@@ -52,8 +55,9 @@ function wireIpc(): void {
     try {
       const record = await captureBBox(bbox);
       log.info({ id: record.id }, 'capture complete');
-      // OCR + router + model dispatch wired in P1 D5+D6+D7
-      return { ok: true, id: record.id, pngPath: record.pngPath };
+      const streamId = startStream();
+      void runPipeline(record, streamId);
+      return { ok: true, id: record.id, streamId };
     } catch (err) {
       log.error({ err: String(err) }, 'capture failed');
       return { ok: false, error: String(err) };
@@ -61,8 +65,18 @@ function wireIpc(): void {
   });
 }
 
+function resolvePromptsDir(): string {
+  // In dev, app.getAppPath() points at the repo root. In packaged app, prompts/
+  // sits next to app.asar — accessed via process.resourcesPath.
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'prompts');
+  }
+  return path.join(app.getAppPath(), 'prompts');
+}
+
 app.whenReady().then(() => {
   log.info('app ready');
+  setPromptsDir(resolvePromptsDir());
   wireIpc();
   createMainWindow();
 
@@ -90,6 +104,7 @@ app.on('will-quit', () => {
   unregisterHotkeys();
 });
 
-app.on('before-quit', () => {
-  log.info('before-quit; future: tear down MLX runtime + DB');
+app.on('before-quit', async () => {
+  log.info('before-quit; tearing down workers');
+  await destroyWorker().catch((err) => log.warn({ err: String(err) }, 'ocr teardown'));
 });
