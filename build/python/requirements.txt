@@ -1,0 +1,8 @@
+# Pinned dependencies for the bundled mlx_lm runtime.
+# Updated only by deliberate review — model compatibility is sensitive
+# to MLX version.
+mlx==0.21.1
+mlx-lm==0.20.6
+mlx-vlm==0.1.10
+huggingface-hub==0.26.5
+sentencepiece==0.2.0

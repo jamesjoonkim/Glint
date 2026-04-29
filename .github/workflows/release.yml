@@ -1,65 +1,31 @@
-name: Build and Release
+name: Release
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v2.*'
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  release:
+    runs-on: macos-14
+    timeout-minutes: 30
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Make Windows Build
-        run: npm run make -- --platform=win32
-
-      - name: Upload Windows Artifacts
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            out/make/squirrel.windows/x64/Glint*.exe
-            out/make/squirrel.windows/x64/Glint*.nupkg
-            out/make/squirrel.windows/x64/RELEASES
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run make
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+          APPLE_DEV_ID_APPLICATION: ${{ secrets.APPLE_DEV_ID_APPLICATION }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - uses: actions/upload-artifact@v4
         with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Make macOS Build
-        run: npm run make -- --platform=darwin
-
-      - name: Upload macOS Artifacts
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            out/make/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+          name: glint-mac-arm64
+          path: out/make/**/*.dmg

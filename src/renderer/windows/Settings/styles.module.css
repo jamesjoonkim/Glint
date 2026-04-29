@@ -1,0 +1,106 @@
+.shell {
+  display: flex;
+  height: 100vh;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.sidebar {
+  width: 200px;
+  flex: 0 0 200px;
+  border-right: 1px solid #1e293b;
+  padding: 20px 12px;
+  -webkit-app-region: drag;
+}
+
+.brand {
+  margin: 0 0 16px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.navItem {
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #cbd5e1;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.navItem:hover { background: #1e293b; }
+.navItemActive {
+  background: #1e293b;
+  color: white;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 32px;
+}
+.body section { max-width: 560px; }
+.body h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+}
+.body p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cbd5e1;
+  margin: 0 0 12px;
+}
+.body code {
+  background: #1e293b;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid #334155;
+  font-family: 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: #93c5fd;
+}
+.body a { color: #93c5fd; }
+
+.note {
+  font-style: italic;
+  color: #64748b;
+}
+
+.kvList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+}
+.kvList li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #1e293b;
+  font-size: 13px;
+}
+
+.button {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.button:hover { background: #334155; }
