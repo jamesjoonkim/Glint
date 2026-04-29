@@ -1,6 +1,19 @@
 import { defineConfig } from 'vite';
 import path from 'node:path';
 
+const SENTINEL_BANNER = `
+try {
+  require('node:fs').appendFileSync('/tmp/glint-bundle.log',
+    new Date().toISOString() + ' bundle loaded\\n');
+  process.on('uncaughtException', function(e) {
+    try {
+      require('node:fs').appendFileSync('/tmp/glint-bundle.log',
+        'UNCAUGHT: ' + (e && e.stack ? e.stack : String(e)) + '\\n');
+    } catch (_) {}
+  });
+} catch (_) {}
+`;
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -11,17 +24,18 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Externalize native + worker-script modules. Vite can't bundle the
-      // worker-script files tesseract.js loads at runtime; better-sqlite3 is
-      // a native binding; pino/pino-pretty have transport workers; jimp ships
-      // platform-specific binaries.
+      output: { banner: SENTINEL_BANNER },
+      // ONLY externalize what truly cannot be inlined:
+      //   - electron        (host-provided)
+      //   - better-sqlite3  (native binding)
+      //   - tesseract.js    (loads worker-script files at runtime)
+      // Pino + jimp are pure JS — let Vite bundle them. Externalizing
+      // pino dragged in 8+ transitive deps that weren't shipped, causing
+      // a 'Cannot find module pino-std-serializers' on packaged boot.
       external: [
         'electron',
         'better-sqlite3',
         'tesseract.js',
-        'pino',
-        'pino-pretty',
-        'jimp',
       ],
     },
   },

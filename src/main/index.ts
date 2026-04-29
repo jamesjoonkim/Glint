@@ -133,6 +133,22 @@ function resolveDbPath(): string {
   );
 }
 
+/**
+ * Resolve the absolute path to better_sqlite3.node, pinned so the
+ * `bindings`-style resolver inside better-sqlite3 can't walk out of
+ * app.asar.unpacked and find a different ABI on dev machines.
+ *
+ * In packaged form: process.resourcesPath/app.asar.unpacked/node_modules/...
+ * In dev form:     project/node_modules/better-sqlite3/build/Release/...
+ */
+function resolveBetterSqliteBinding(): string {
+  const rel = ['node_modules', 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node'];
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', ...rel);
+  }
+  return path.join(app.getAppPath(), ...rel);
+}
+
 function resolveRuntimeBinary(): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, 'runtime', 'glint-mlx-server');
@@ -218,7 +234,9 @@ app.whenReady().then(async () => {
   log.info('app ready');
   setPromptsDir(resolvePromptsDir());
   setMigrationsDir(resolveMigrationsDir());
-  await openStore(resolveDbPath()).catch((err) =>
+  await openStore(resolveDbPath(), {
+    nativeBinding: resolveBetterSqliteBinding(),
+  }).catch((err) =>
     log.error({ err: String(err) }, 'store open failed'),
   );
   // Start text runtime in background — UI can render before model is ready.

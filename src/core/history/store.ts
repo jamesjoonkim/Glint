@@ -38,13 +38,31 @@ export type TurnRow = {
 
 let db: DB | null = null;
 
-export async function openStore(dbPath: string): Promise<DB> {
+export type OpenStoreOptions = {
+  /**
+   * Absolute path to the better_sqlite3.node binding. When omitted,
+   * better-sqlite3's bundled `bindings`-style resolver walks up from the
+   * module dir and CAN drift out of the .app into the project's node_modules
+   * on dev machines that have both source + packaged installs. Always pass
+   * this from main/index.ts so the binding is pinned to the build we
+   * shipped (or to the dev binding in non-packaged runs).
+   */
+  nativeBinding?: string;
+};
+
+export async function openStore(
+  dbPath: string,
+  opts: OpenStoreOptions = {},
+): Promise<DB> {
   if (db) return db;
-  db = new Database(dbPath);
+  db = new Database(dbPath, opts.nativeBinding ? { nativeBinding: opts.nativeBinding } : {});
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   const res = await applyMigrations(db);
-  log.info({ dbPath, version: res.current, applied: res.applied }, 'store opened');
+  log.info(
+    { dbPath, version: res.current, applied: res.applied, nativeBinding: opts.nativeBinding ?? '<auto>' },
+    'store opened',
+  );
   return db;
 }
 

@@ -13,46 +13,64 @@ import path from 'node:path';
  * node_modules by default; auto-unpack-natives only catches modules
  * that ARE in the bundle, not externalized ones — so we copy here.
  */
+/**
+ * Read package.json#dependencies — a SINGLE level only. Returns names.
+ */
+async function depsOf(modulePath: string): Promise<string[]> {
+  const pkgJsonPath = path.join(modulePath, 'package.json');
+  if (!(await fsExtra.pathExists(pkgJsonPath))) return [];
+  const pkg = (await fsExtra.readJson(pkgJsonPath)) as {
+    dependencies?: Record<string, string>;
+  };
+  return Object.keys(pkg.dependencies ?? {});
+}
+
+/**
+ * Walk the dep tree starting from a set of root packages, returning every
+ * transitively-required module. We ship these into the packaged node_modules
+ * so Vite-externalized requires resolve correctly inside app.asar.
+ */
+async function resolveDepTree(roots: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  const queue = [...roots];
+  while (queue.length) {
+    const name = queue.shift()!;
+    if (found.has(name)) continue;
+    const dir = path.resolve(__dirname, 'node_modules', name);
+    if (!(await fsExtra.pathExists(dir))) continue;
+    found.add(name);
+    const children = await depsOf(dir);
+    for (const c of children) queue.push(c);
+  }
+  return found;
+}
+
 async function shipNativeModules(buildPath: string): Promise<void> {
-  // Modules that must be shipped as files (not inlined) because they load
-  // worker scripts, native bindings, or platform binaries at runtime.
-  const externalDeps = [
-    'better-sqlite3',
-    'bindings',
-    'file-uri-to-path',
-    'tesseract.js',
-    'pino',
-    'pino-pretty',
-    'pino-abstract-transport',
-    'sonic-boom',
-    'thread-stream',
-    'fast-redact',
-    'real-require',
-    'safe-stable-stringify',
-    'split2',
-    'on-exit-leak-free',
-    'process-warning',
-    'atomic-sleep',
-    'jimp',
-  ];
+  // Roots match `external` in vite.main.config.ts. Their full transitive
+  // dependency tree (resolved against this repo's node_modules) is shipped.
+  const roots = ['better-sqlite3', 'bindings', 'tesseract.js'];
+  const all = await resolveDepTree(roots);
+
   const dest = path.join(buildPath, 'node_modules');
   await fsExtra.ensureDir(dest);
-  for (const dep of externalDeps) {
-    const src = path.resolve(__dirname, 'node_modules', dep);
-    const target = path.join(dest, dep);
+  for (const name of all) {
+    const src = path.resolve(__dirname, 'node_modules', name);
+    const target = path.join(dest, name);
     if (await fsExtra.pathExists(src)) {
       await fsExtra.copy(src, target, { dereference: true });
     }
   }
+  // eslint-disable-next-line no-console
+  console.log(`[forge] shipped ${all.size} module(s):`, [...all].sort().join(', '));
 }
 
 const config: ForgeConfig = {
   packagerConfig: {
-    // .node bindings + worker scripts + WASM cores can't load from inside an
-    // asar archive — unpack the whole module dir so resolveSelf works.
+    // .node bindings + worker scripts + WASM cores can't load from inside
+    // an asar archive — unpack the dirs that contain them.
     asar: {
       unpack:
-        '**/{*.node,*.wasm,better-sqlite3/**,bindings/**,file-uri-to-path/**,tesseract.js/**,tesseract.js-core/**,pino/**,pino-pretty/**,thread-stream/**,sonic-boom/**,jimp/**}',
+        '**/{*.node,*.wasm,better-sqlite3/**,bindings/**,file-uri-to-path/**,tesseract.js/**,tesseract.js-core/**}',
     },
     afterCopy: [
       (buildPath, _electronVersion, _platform, _arch, callback) => {
