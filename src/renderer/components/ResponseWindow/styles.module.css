@@ -286,6 +286,7 @@
   margin: 14px 0;
   font-size: 12.5px;
   line-height: 1.6;
+  white-space: pre;
 }
 .md pre code {
   background: transparent;
@@ -293,6 +294,109 @@
   padding: 0;
   color: var(--text);
   font-size: inherit;
+  white-space: pre;
+}
+
+/*
+ * Streamdown is built around Tailwind utilities (whitespace-pre, bg-background,
+ * etc.) that don't exist in our app — so its code-block falls through to
+ * browser defaults: white-space: normal collapses newlines, and the header
+ * chrome (language label + copy/download icons) renders unstyled and floating.
+ *
+ * Two fixes: force pre semantics on the code body, and hide the header chrome
+ * since we don't want copy/download buttons on a local-only chat anyway.
+ */
+.md [data-streamdown='code-block'] {
+  background: var(--bg-rise);
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  margin: 14px 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  overflow: hidden;
+}
+.md [data-streamdown='code-block-header'],
+.md [data-streamdown='code-block-actions'] {
+  display: none;
+}
+.md [data-streamdown='code-block-body'] {
+  white-space: pre;
+  overflow-x: auto;
+  padding: 14px 16px;
+}
+.md [data-streamdown='code-block-body'] pre {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  white-space: pre;
+}
+.md [data-streamdown='code-block-body'] code {
+  white-space: pre;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.md [data-streamdown='inline-code'] {
+  font-family: 'SF Mono', Menlo, Monaco, monospace;
+  font-size: 12.5px;
+  background: rgba(245, 185, 69, 0.08);
+  color: #f5d196;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(245, 185, 69, 0.12);
+}
+
+/* Tables — same Tailwind-fallback problem as code blocks. Style them
+   manually to match the editorial palette. */
+.md [data-streamdown='table-wrapper'] {
+  margin: 14px 0;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+.md [data-streamdown='table-wrapper'] table,
+.md table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.md [data-streamdown='table-row'],
+.md tr {
+  border-bottom: 1px solid var(--hairline);
+}
+.md [data-streamdown='table-row']:last-child,
+.md tr:last-child {
+  border-bottom: none;
+}
+.md [data-streamdown='table-header-cell'],
+.md th {
+  padding: 8px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.025);
+  border-right: 1px solid var(--hairline);
+}
+.md [data-streamdown='table-cell'],
+.md td {
+  padding: 8px 12px;
+  vertical-align: top;
+  color: var(--text);
+  border-right: 1px solid var(--hairline);
+}
+.md [data-streamdown='table-header-cell']:last-child,
+.md [data-streamdown='table-cell']:last-child,
+.md th:last-child,
+.md td:last-child {
+  border-right: none;
 }
 
 .md ul, .md ol { padding-left: 22px; margin: 10px 0; }
