@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { getMissingModels } from '../../src/main/first-run.js';
+import { getMissingModels, getModelsRoot } from '../../src/main/first-run.js';
 import { MODEL_MANIFEST } from '../../src/shared/models.js';
 
 let root: string;
@@ -26,7 +26,7 @@ describe('getMissingModels', () => {
     if (!firstModel) throw new Error('MODEL_MANIFEST is empty');
     mkdirSync(path.join(root, firstModel.localDir), { recursive: true });
     const missing = getMissingModels(root, MODEL_MANIFEST);
-    expect(missing.map((m) => m.role)).toContain(firstModel.role);
+    expect(missing.map((m) => m.localDir)).toContain(firstModel.localDir);
   });
 
   it('treats a dir with at least one safetensors as present', () => {
@@ -36,7 +36,7 @@ describe('getMissingModels', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(path.join(dir, 'model.safetensors'), 'stub');
     const missing = getMissingModels(root, MODEL_MANIFEST);
-    expect(missing.map((m) => m.role)).not.toContain(firstModel.role);
+    expect(missing.map((m) => m.localDir)).not.toContain(firstModel.localDir);
   });
 
   it('returns empty when all models present', () => {
@@ -46,5 +46,12 @@ describe('getMissingModels', () => {
       writeFileSync(path.join(dir, 'model.safetensors'), 'stub');
     }
     expect(getMissingModels(root, MODEL_MANIFEST)).toEqual([]);
+  });
+});
+
+describe('getModelsRoot', () => {
+  it('returns the expected app-support path', () => {
+    const root = getModelsRoot();
+    expect(root).toContain(path.join('Application Support', 'Glint', 'models'));
   });
 });

@@ -35,6 +35,10 @@ export async function markFirstRunComplete(): Promise<void> {
  * empty of weight files. A weight file is anything matching `*.safetensors`
  * — partial downloads (e.g. interrupted by the user) leave only `.incomplete`
  * files behind, which we rightly treat as not-yet-installed.
+ *
+ * Intentionally synchronous — called once at boot before any window opens,
+ * so blocking the main process briefly here is acceptable and simpler than
+ * coordinating an async boot gate.
  */
 export function getMissingModels(
   modelsRoot: string,
