@@ -45,6 +45,14 @@ export const IPC = {
     get: 'settings:get',
     set: 'settings:set',
   },
+  // first-run wizard
+  firstRun: {
+    getStatus: 'firstRun:getStatus',
+    start: 'firstRun:start',
+    cancel: 'firstRun:cancel',
+    retry: 'firstRun:retry',
+    complete: 'firstRun:complete',
+  },
 } as const;
 
 export type IpcChannelName =
