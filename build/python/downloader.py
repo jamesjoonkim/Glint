@@ -38,14 +38,20 @@ class JsonlTqdm(tqdm):
     """tqdm subclass that emits JSONL events instead of drawing a bar.
 
     huggingface_hub instantiates one tqdm per file with desc=<filename>.
-    We surface file_start once, then progress events on each update, and
-    file_done when the bar reaches `total` (or is closed).
+    file_start fires on construction, progress events on update (throttled),
+    and file_done on close. Emitting from __init__/close (rather than the
+    first update call) ensures zero-byte files still produce paired
+    file_start/file_done events.
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._last_emitted = 0
-        self._announced_start = False
+        _emit({
+            "event": "file_start",
+            "name": self.desc or "unknown",
+            "size": int(self.total or 0),
+        })
 
     def display(self, *_args: Any, **_kwargs: Any) -> None:
         # Suppress the default rendering — we don't want tqdm's bars
@@ -54,26 +60,20 @@ class JsonlTqdm(tqdm):
 
     def update(self, n: int = 1) -> bool | None:
         result = super().update(n)
-        name = self.desc or "unknown"
-        if not self._announced_start:
-            _emit({"event": "file_start", "name": name, "size": int(self.total or 0)})
-            self._announced_start = True
         # Throttle progress emits to ~once per 4 MiB to keep JSONL volume sane.
-        if self.n - self._last_emitted >= 4 * 1024 * 1024 or self.n == self.total:
-            _emit(
-                {
-                    "event": "progress",
-                    "name": name,
-                    "bytes": int(self.n),
-                    "total": int(self.total or 0),
-                }
-            )
+        is_final = self.total is not None and self.n == self.total
+        if self.n - self._last_emitted >= 4 * 1024 * 1024 or is_final:
+            _emit({
+                "event": "progress",
+                "name": self.desc or "unknown",
+                "bytes": int(self.n),
+                "total": int(self.total or 0),
+            })
             self._last_emitted = self.n
         return result
 
     def close(self) -> None:
-        if self._announced_start and self.n >= (self.total or 0):
-            _emit({"event": "file_done", "name": self.desc or "unknown"})
+        _emit({"event": "file_done", "name": self.desc or "unknown"})
         super().close()
 
 
@@ -83,11 +83,12 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--dest", required=True, help="Local destination directory")
     args = parser.parse_args(argv)
 
+    # Disable the library's own progress UI so only our tqdm subclass speaks.
+    # Set this BEFORE any huggingface_hub side-effect that might check the flag.
+    disable_progress_bars()
+
     dest = Path(args.dest)
     dest.mkdir(parents=True, exist_ok=True)
-
-    # Disable the library's own progress UI so only our tqdm subclass speaks.
-    disable_progress_bars()
 
     try:
         snapshot_download(
