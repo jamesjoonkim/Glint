@@ -9,13 +9,13 @@
 export type ModelRole = 'text' | 'vision' | 'embed';
 
 export type ModelSpec = {
-  role: ModelRole;
-  repo: string;
-  localDir: string;
+  readonly role: ModelRole;
+  readonly repo: string;
+  readonly localDir: string;
   /** Approximate on-disk size after download, in gigabytes. UI hint only. */
-  sizeGB: number;
+  readonly sizeGB: number;
   /** Human-readable label for the wizard. */
-  label: string;
+  readonly label: string;
 };
 
 export const MODEL_MANIFEST: readonly ModelSpec[] = [
@@ -42,7 +42,8 @@ export const MODEL_MANIFEST: readonly ModelSpec[] = [
   },
 ] as const;
 
-export const MANIFEST_TOTAL_GB = MODEL_MANIFEST.reduce(
+/** Sum of `sizeGB` across the manifest. Approximate, UI hint only. */
+export const MANIFEST_TOTAL_GB: number = MODEL_MANIFEST.reduce(
   (sum, m) => sum + m.sizeGB,
   0,
 );
