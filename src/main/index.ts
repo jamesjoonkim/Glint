@@ -44,8 +44,10 @@ import {
   searchChatThreads,
   openStore,
   searchKeyword,
+  setThumbnail,
   type CaptureRow,
 } from '../core/history/store.js';
+import { makeThumbnail } from '../core/history/thumbnails.js';
 import { setMigrationsDir } from '../core/history/migrations.js';
 import { loadSettings, setSettingsPath } from './settings.js';
 import type { CaptureBBox } from '../shared/types.js';
@@ -192,7 +194,7 @@ function wireIpc(): void {
       // are explicit user-attached images, the composed turn always goes
       // through the vision route when possible.
       try {
-        createCaptureWithThread({
+        const { capture } = createCaptureWithThread({
           pngPath: decoded.pngPath,
           ocrText: '',
           ocrConfidence: 0,
@@ -200,6 +202,12 @@ function wireIpc(): void {
           route: 'vision',
           threadId,
         });
+        // Generate thumbnail async — pasted/dropped attachments otherwise
+        // render with the empty placeholder in the captures grid until the
+        // startup backfill catches them on next launch.
+        void makeThumbnail(decoded.pngPath)
+          .then((thumb) => setThumbnail(capture.id, thumb))
+          .catch((err) => log.warn({ err: String(err) }, 'attachment thumb failed'));
       } catch (err) {
         log.warn({ err: String(err) }, 'composed attachment row insert failed');
       }
@@ -632,6 +640,13 @@ app.whenReady().then(async () => {
       } else {
         fire();
       }
+    },
+    onDashboard: () => {
+      // Close the chat (hide response window) and surface the dashboard.
+      // hideResponseWindow only .hide()s — does not fire onResponseClosed,
+      // so showMainWindow must be called explicitly here.
+      hideResponseWindow();
+      showMainWindow();
     },
     onHistory: () => openHistory(),
     onSettings: () => log.info('settings hotkey (P5)'),

@@ -24,8 +24,19 @@ function formatTimestamp(ts: number): string {
   });
 }
 
+// Legacy placeholder we used to emit for image-only sends. Suppress it on
+// replay so old threads don't show "[1 image attached]" bubbles next to the
+// real image chip.
+const LEGACY_IMAGE_PLACEHOLDER = /^\[\d+ images? attached\]$/;
+
 export function TurnList({ turns, capture, streaming }: Props): JSX.Element {
-  const visible = turns.filter((t) => t.role === 'user' || t.role === 'assistant');
+  const visible = turns.filter((t) => {
+    if (t.role !== 'user' && t.role !== 'assistant') return false;
+    const trimmed = t.content.trim();
+    if (trimmed.length === 0) return false;
+    if (t.role === 'user' && LEGACY_IMAGE_PLACEHOLDER.test(trimmed)) return false;
+    return true;
+  });
   // "Reading the capture…" only makes sense when the model is processing the
   // initial screenshot. Any follow-up message (turns already exist) just says
   // "thinking…".
