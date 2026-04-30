@@ -6,6 +6,7 @@ const log = createLogger('hotkey');
 export const DEFAULT_BINDINGS = {
   capture: 'CommandOrControl+Shift+X',
   chat:    'CommandOrControl+Shift+Z',
+  dashboard: 'CommandOrControl+Shift+D',
   history: 'CommandOrControl+Shift+H',
   settings: 'CommandOrControl+,',
 } as const;
@@ -15,6 +16,7 @@ export type HotkeyBindings = typeof DEFAULT_BINDINGS;
 export type HotkeyHandlers = {
   onCapture: () => void;
   onChat: () => void;
+  onDashboard: () => void;
   onHistory: () => void;
   onSettings: () => void;
 };
@@ -34,6 +36,7 @@ export function registerHotkeys(
   const pairs: Array<[string, () => void]> = [
     [bindings.capture, handlers.onCapture],
     [bindings.chat, handlers.onChat],
+    [bindings.dashboard, handlers.onDashboard],
     [bindings.history, handlers.onHistory],
     [bindings.settings, handlers.onSettings],
   ];

@@ -10,7 +10,7 @@
     "npm": ">=10"
   },
   "scripts": {
-    "predev": "pkill -9 -f 'out/Glint-darwin-arm64' 2>/dev/null; pkill -9 -f 'Glint.app/Contents/Resources/runtime/glint-mlx-server' 2>/dev/null; true",
+    "predev": "pkill -9 -f 'out/Glint-darwin-arm64' 2>/dev/null; pkill -9 -f '/Applications/Glint.app/Contents/MacOS/Glint' 2>/dev/null; pkill -9 -f 'Glint.app/Contents/Resources/runtime/glint-mlx-server' 2>/dev/null; true",
     "dev": "npm run rebuild:electron && electron-forge start",
     "package": "npm run rebuild:electron && electron-forge package",
     "make": "npm run rebuild:electron && electron-forge make",
