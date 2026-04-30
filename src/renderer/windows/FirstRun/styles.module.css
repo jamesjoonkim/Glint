@@ -28,13 +28,10 @@
 }
 
 .title {
-  margin: 0 0 12px;
-  font-family: var(--serif);
-  font-style: italic;
-  font-weight: 400;
   font-size: 28px;
-  letter-spacing: -0.015em;
-  color: var(--paper);
+  font-weight: 600;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
 }
 
 .body {
@@ -120,3 +117,90 @@
   background: var(--brass);
   box-shadow: 0 0 8px var(--brass-soft);
 }
+
+/* ─── New wizard layout (welcome / downloading / done) ─────────────────── */
+
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 56px 48px 40px;
+  min-height: 100vh;
+  background: var(--ink-0, #0a0b0f);
+  color: var(--paper-0, #e9e3d4);
+  font-family: var(--font-serif, ui-serif, Georgia, serif);
+}
+
+.subtitle {
+  margin: 0 0 32px;
+  text-align: center;
+  color: var(--paper-2, #a99f8a);
+  line-height: 1.5;
+}
+
+.rows {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto 96px;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--ink-3, #1a2236);
+}
+
+.label { font-size: 14px; }
+.size  { font-size: 12px; color: var(--paper-2, #a99f8a); font-variant-numeric: tabular-nums; }
+
+.progress { justify-self: end; min-width: 96px; text-align: right; }
+
+.bar {
+  width: 96px;
+  height: 6px;
+  background: var(--ink-2, #11192a);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.fill {
+  height: 100%;
+  background: var(--brass-0, #c9a96e);
+  transition: width 120ms linear;
+}
+.idle { color: var(--paper-3, #6b6452); }
+.done { color: var(--moss-0, #7bd389); font-weight: 700; }
+
+.retry {
+  font: inherit;
+  font-size: 12px;
+  background: transparent;
+  color: var(--brass-0, #c9a96e);
+  border: 1px solid var(--brass-0, #c9a96e);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.retry:hover { background: var(--brass-0, #c9a96e); color: var(--ink-0, #0a0b0f); }
+
+.disk { font-size: 12px; color: var(--paper-2, #a99f8a); margin: 0 0 24px; }
+.warn { color: var(--rust-0, #d97757); }
+
+.actions { display: flex; gap: 12px; }
+
+.cta {
+  font: inherit;
+  font-size: 14px;
+  background: var(--brass-0, #c9a96e);
+  color: var(--ink-0, #0a0b0f);
+  border: none;
+  border-radius: 4px;
+  padding: 10px 24px;
+  cursor: pointer;
+}
+.cta:disabled { opacity: 0.4; cursor: not-allowed; }
+.hint { color: var(--paper-2, #a99f8a); font-size: 13px; }
