@@ -25,7 +25,7 @@ process.on('unhandledRejection', (e) => {
   createLogger('main').error({ err: String(e) }, 'unhandled rejection');
 });
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
-import { closeOverlay, openOverlay } from './windows/overlay.js';
+import { closeOverlay, openOverlay, restoreOverlayHiddenWindows } from './windows/overlay.js';
 import { openHistory } from './windows/history.js';
 import { hideResponseWindow, onResponseClosed, openResponse } from './windows/response.js';
 import { captureBBox } from './capture.js';
@@ -127,6 +127,7 @@ function wireIpc(): void {
 
   ipcMain.handle('capture:cancel', () => {
     closeOverlay();
+    restoreOverlayHiddenWindows();
     pendingCaptureThreadId = null;
     return { ok: true } as const;
   });
@@ -138,9 +139,10 @@ function wireIpc(): void {
     if (!granted) return { ok: false, error: 'screen recording denied' };
     // Stash the target thread; capture:request consumes it on the next call.
     pendingCaptureThreadId = threadId;
-    // Hide the response window so the chat isn't in the captured frame.
-    // openResponse() will re-show it once startStream fires after capture.
-    hideResponseWindow();
+    // openOverlay() hides every visible Glint window (incl. the response
+    // chat) so none appear in the captured frame, and tracks them for
+    // restore on cancel. openResponse() re-shows the chat when the stream
+    // fires after a successful capture.
     openOverlay();
     return { ok: true };
   });
@@ -262,6 +264,7 @@ function wireIpc(): void {
     } catch (err) {
       log.error({ err: String(err) }, 'capture failed');
       closeOverlay(); // even on failure — never leave the marquee on screen
+      restoreOverlayHiddenWindows(); // bring back the UI we hid for the shot
       return { ok: false, error: String(err) };
     }
   });

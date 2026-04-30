@@ -70,9 +70,6 @@ export function SelectionOverlay(): JSX.Element {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {!dragging && (
-        <div className={styles.hint}>Drag to select · Esc to cancel</div>
-      )}
       {rect && (
         <div
           className={styles.selection}
