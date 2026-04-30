@@ -244,6 +244,15 @@ async function streamWithToolLoop(args: {
   let activeCfg = args.cfg;
   let activeModel = args.model;
 
+  log.info(
+    { webSearchOn, maxIterations, baseUrl: activeCfg.baseUrl },
+    'tool loop entered',
+  );
+  // Direct stdout for dev visibility — pino's daily file can buffer.
+  console.log(
+    `[tool-loop] entered webSearchOn=${webSearchOn} max=${maxIterations} base=${activeCfg.baseUrl}`,
+  );
+
   let lastVisibleAnswer = '';
   for (let iteration = 0; iteration < maxIterations; iteration++) {
     const { answer, suppressed } = await streamWithToolDetection(
@@ -255,25 +264,43 @@ async function streamWithToolLoop(args: {
       webSearchOn,
     );
 
+    log.info(
+      { iteration, suppressed, answerLen: answer.length, head: answer.slice(0, 60) },
+      'tool loop iter result',
+    );
+    console.log(
+      `[tool-loop] iter=${iteration} suppressed=${suppressed} answerLen=${answer.length} head=${JSON.stringify(answer.slice(0, 80))}`,
+    );
+
     if (args.controller.signal.aborted) return suppressed ? '' : answer;
     if (!suppressed) return answer;
 
     const tc = parseToolCall(answer);
     if (!tc || tc.name !== 'web_search') {
-      args.send('model:stream:token', { id: args.streamId, chunk: answer });
-      return answer;
+      // Model started a tool call but it didn't parse, OR called a tool we
+      // don't have. The raw `<tool_call>` tags render as invisible HTML in
+      // Streamdown — strip them so the user sees the prose at least, and
+      // fall back to a friendly nudge if there's nothing readable left.
+      log.warn(
+        { iteration, parsed: !!tc, tcName: tc?.name, answerLen: answer.length },
+        'tool call unrecognized; falling back to plain text',
+      );
+      const cleaned = answer.replace(/<\/?tool_call>/gi, '').trim();
+      const visible = cleaned || "I'd search the web for you — what should I look up?";
+      args.send('model:stream:token', { id: args.streamId, chunk: visible });
+      return visible;
     }
     const query = String((tc.arguments as { query?: unknown }).query ?? '').slice(0, 500);
     if (!query) {
-      args.send('model:stream:token', {
-        id: args.streamId,
-        chunk: '_[web_search tool call had no query]_',
-      });
-      return '';
+      log.warn({ iteration }, 'web_search tool call had empty query');
+      const fallback = "I'd search the web — what would you like me to look up?";
+      args.send('model:stream:token', { id: args.streamId, chunk: fallback });
+      return fallback;
     }
 
     args.send('model:tool:web-search', { id: args.streamId, query });
     log.info({ query, iteration }, 'web_search tool dispatch');
+    console.log(`[tool-loop] web_search dispatch query=${JSON.stringify(query)}`);
 
     let results: SearchResult[];
     let imageUrls: string[];
@@ -366,13 +393,33 @@ async function streamWithToolDetection(
 
     if (!decided) {
       buffer += tok;
-      if (buffer.length >= 120 || buffer.includes('>')) {
-        const trimmed = buffer.trimStart();
-        if (trimmed.startsWith('<tool_call>')) {
-          suppressed = true;
-        } else {
-          send('model:stream:token', { id: streamId, chunk: buffer });
-        }
+      const trimmed = buffer.trimStart();
+
+      // Strong-suppress: tagged tool call.
+      if (trimmed.startsWith('<tool_call>')) {
+        suppressed = true;
+        decided = true;
+        continue;
+      }
+      // Strong-suppress: bare JSON tool call (Qwen sometimes skips the tags).
+      // The regex is narrow on purpose — `{"name":"web_search"` is the
+      // unambiguous signal, so legit JSON code blocks won't be eaten.
+      if (trimmed.startsWith('{') && /"name"\s*:\s*"web_search"/.test(trimmed)) {
+        suppressed = true;
+        decided = true;
+        continue;
+      }
+      // Strong-flush: first non-whitespace char is clearly prose (not `<`,
+      // not `{`). Emit the buffer and stream the rest passthrough.
+      if (trimmed && trimmed[0] !== '<' && trimmed[0] !== '{') {
+        send('model:stream:token', { id: streamId, chunk: buffer });
+        decided = true;
+        continue;
+      }
+      // Indeterminate — model started with `<` or `{` but hasn't shown
+      // enough to confirm. Cap at 200 chars then give up and pass through.
+      if (buffer.length >= 200) {
+        send('model:stream:token', { id: streamId, chunk: buffer });
         decided = true;
       }
       continue;
@@ -439,12 +486,10 @@ export async function runComposedTurn(args: {
   activeControllers.set(streamId, controller);
 
   try {
-    // Save the user-visible text turn. Image-only sends use a placeholder
-    // so the turn list shows something for the user bubble.
-    const userVisible = args.text.trim()
-      ? args.text
-      : `[${args.pngPaths.length} image${args.pngPaths.length === 1 ? '' : 's'} attached]`;
-    appendTurn(args.threadId, 'user', userVisible);
+    // Save the user-visible text turn. Image-only sends save empty content;
+    // the renderer hides empty user bubbles so the attached-image preview
+    // (rendered as a separate capture chip) speaks for itself.
+    appendTurn(args.threadId, 'user', args.text.trim());
 
     const hasImages = args.pngPaths.length > 0;
     const useVision = hasImages && !!deps.visionUrl;
