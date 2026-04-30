@@ -1,0 +1,68 @@
+/*
+ * Glint editorial-dark theme tokens. Lifted from HistoryPanel so every
+ * window — Settings, FirstRun, ResponseWindow — inherits the same
+ * paper-on-ink notebook aesthetic.
+ *
+ * Conceptual frame: leather-bound research notebook on a dim desk lamp.
+ * Hairline rules over rounded boxes. One brass accent, used sparingly.
+ *
+ * No purple gradients. No saturated SaaS blue. No glow boxes.
+ */
+
+:root {
+  /* ── Surfaces (paper sits on ink) ───────────────────────────── */
+  --ink:           #0a0b0f;
+  --ink-2:         #14161c;
+  --ink-3:         #1c1f27;
+  --ink-overlay:   rgba(10, 11, 15, 0.78);
+
+  /* ── Hairlines (fine pencil rules) ──────────────────────────── */
+  --rule:          #232732;
+  --rule-strong:   #2c3140;
+  --rule-warm:     rgba(201, 169, 110, 0.22);
+
+  /* ── Paper (text on ink) ────────────────────────────────────── */
+  --paper:         #ece6d8;
+  --paper-2:       #c8c2b3;
+  --paper-3:       #8a8579;
+  --paper-4:       #5a5648;
+
+  /* ── Brass (single warm accent — used SPARINGLY) ────────────── */
+  --brass:         #c9a96e;
+  --brass-soft:    rgba(201, 169, 110, 0.18);
+  --brass-glow:    rgba(201, 169, 110, 0.28);
+
+  /* ── Status (warm-biased — no fire-engine red) ──────────────── */
+  --signal-ok:     #8db98a;
+  --signal-warn:   #d4a657;
+  --signal-err:    #c66b5a;
+
+  /* ── Type ───────────────────────────────────────────────────── */
+  --serif: 'New York', 'Charter', ui-serif, Georgia, 'Times New Roman', serif;
+  --sans:  -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  --mono:  'SF Mono', ui-monospace, 'JetBrains Mono', Menlo, monospace;
+
+  /* ── Motion (slow, considered — books don't snap) ───────────── */
+  --ease-paper:    cubic-bezier(0.32, 0.72, 0.24, 1);
+  --t-fast:        120ms;
+  --t-med:         220ms;
+  --t-slow:        420ms;
+
+  /* ── Radii (almost square — books don't curve much) ─────────── */
+  --r-1:           4px;
+  --r-2:           8px;
+  --r-3:           12px;
+
+  /* ── Shadows (subtle — no SaaS drop-shadow) ─────────────────── */
+  --shadow-card:   0 1px 0 rgba(255, 255, 255, 0.02) inset,
+                   0 12px 32px -16px rgba(0, 0, 0, 0.6);
+  --shadow-lift:   0 24px 60px -24px rgba(0, 0, 0, 0.7);
+
+  /* ── Legacy aliases — HistoryPanel uses these names today.
+        Kept so the migration is a no-op for the dashboard. ─────── */
+  --hairline:        var(--rule);
+  --hairline-strong: var(--rule-strong);
+  --accent:          var(--brass);
+  --accent-soft:     var(--brass-soft);
+  --accent-glow:     var(--brass-glow);
+}
