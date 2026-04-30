@@ -61,7 +61,7 @@ class JsonlTqdm(tqdm):
     def update(self, n: int = 1) -> bool | None:
         result = super().update(n)
         # Throttle progress emits to ~once per 4 MiB to keep JSONL volume sane.
-        is_final = self.total is not None and self.n == self.total
+        is_final = self.total is not None and self.n >= self.total
         if self.n - self._last_emitted >= 4 * 1024 * 1024 or is_final:
             _emit({
                 "event": "progress",
@@ -73,7 +73,13 @@ class JsonlTqdm(tqdm):
         return result
 
     def close(self) -> None:
-        _emit({"event": "file_done", "name": self.desc or "unknown"})
+        # Only emit file_done on actual completion: n >= total covers both the
+        # success case AND the zero-byte case (n=0, total=0). Interrupted bars
+        # have n < total and correctly stay silent — the surrounding except
+        # block in main() emits the structured `error` event for those.
+        total = self.total or 0
+        if self.n >= total:
+            _emit({"event": "file_done", "name": self.desc or "unknown"})
         super().close()
 
 
