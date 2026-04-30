@@ -60,7 +60,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  -webkit-app-region: no-drag;
 }
 
 .spark {
@@ -89,7 +88,6 @@
   letter-spacing: 0.04em;
   text-transform: lowercase;
   color: var(--text-muted);
-  -webkit-app-region: no-drag;
 }
 
 .statusDot {
