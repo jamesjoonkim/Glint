@@ -631,11 +631,9 @@ app.whenReady().then(async () => {
   wireIpc();
   createMainWindow();
   onResponseClosed(() => {
-    // When the chat/response window is destroyed, drop any chat threads
-    // that never accumulated a turn. Pairs with the listChats sweep so
-    // dashboard reflects reality even before the user reopens it.
+    // Drop chat threads that never accumulated a turn. Dashboard surfaces
+    // only on launch + Cmd+Shift+D — closing a chat must not raise it.
     purgeEmptyChatThreads();
-    showMainWindow();
   });
 
   registerHotkeys(DEFAULT_BINDINGS, {
