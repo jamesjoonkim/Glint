@@ -24,6 +24,7 @@ hidden = (
     + collect_submodules('torch')
     + collect_submodules('torchvision')
     + collect_submodules('transformers')
+    + collect_submodules('tqdm')
     + ['sentencepiece']
 )
 
@@ -37,11 +38,11 @@ datas = (
 )
 
 a = Analysis(
-    ['runtime_entry.py', 'vlm_server.py'],
+    ['runtime_entry.py', 'vlm_server.py', 'downloader.py'],
     pathex=[],
     binaries=[],
     datas=datas,
-    hiddenimports=hidden + ['vlm_server'],
+    hiddenimports=hidden + ['vlm_server', 'downloader'],
     hookspath=[],
     runtime_hooks=[],
     excludes=['matplotlib', 'pandas', 'IPython', 'notebook', 'tkinter'],
