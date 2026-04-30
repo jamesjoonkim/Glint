@@ -100,9 +100,32 @@ export function parseSseLine(line: string): string | null {
   if (body === '[DONE]') return '[DONE]';
   try {
     const obj = JSON.parse(body) as {
-      choices?: Array<{ delta?: { content?: string } }>;
+      choices?: Array<{
+        delta?: {
+          content?: string;
+          tool_calls?: Array<{
+            function?: { name?: string; arguments?: string };
+          }>;
+        };
+      }>;
     };
-    return obj.choices?.[0]?.delta?.content ?? null;
+    const delta = obj.choices?.[0]?.delta;
+    if (!delta) return null;
+    // Plain content delta — the common case.
+    if (typeof delta.content === 'string' && delta.content.length > 0) {
+      return delta.content;
+    }
+    // mlx_lm.server detects Qwen's `<tool_call>` syntax server-side and emits
+    // the call as OpenAI structured `tool_calls` instead of inline content.
+    // Re-synthesize the `<tool_call>...</tool_call>` text so the rest of the
+    // pipeline (streamWithToolDetection, parseToolCall) sees the same shape
+    // it would have if the server had streamed the raw tags.
+    const tc = delta.tool_calls?.[0]?.function;
+    if (tc?.name) {
+      const argsRaw = typeof tc.arguments === 'string' ? tc.arguments : '{}';
+      return `<tool_call>\n{"name": "${tc.name}", "arguments": ${argsRaw}}\n</tool_call>`;
+    }
+    return null;
   } catch {
     return null;
   }
