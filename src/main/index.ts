@@ -41,6 +41,7 @@ import {
   getTurns,
   listChatThreads,
   listRecent,
+  purgeEmptyChatThreads,
   searchChatThreads,
   openStore,
   searchKeyword,
@@ -275,11 +276,19 @@ function wireIpc(): void {
     mapHistory(searchKeyword(typeof query === 'string' ? query : '')),
   );
 
-  ipcMain.handle('history:listChats', () => listChatThreads(200));
+  ipcMain.handle('history:listChats', () => {
+    // Reap empty chat threads (no capture, 0 turns) before listing so the
+    // dashboard never shows "untitled chat · 0 turns" placeholders the user
+    // never typed in. Safe: an empty thread has no UI path back to it once
+    // hidden, so nothing references the rows we delete.
+    purgeEmptyChatThreads();
+    return listChatThreads(200);
+  });
 
-  ipcMain.handle('history:searchChats', (_e, query: unknown) =>
-    searchChatThreads(typeof query === 'string' ? query : '', 200),
-  );
+  ipcMain.handle('history:searchChats', (_e, query: unknown) => {
+    purgeEmptyChatThreads();
+    return searchChatThreads(typeof query === 'string' ? query : '', 200);
+  });
 
   ipcMain.handle('history:openThread', (_e, payload: unknown) => {
     const threadId = (payload as { threadId?: unknown })?.threadId;
@@ -621,7 +630,13 @@ app.whenReady().then(async () => {
   void visionRuntimePromise.then((h) => (visionRuntime = h));
   wireIpc();
   createMainWindow();
-  onResponseClosed(() => showMainWindow());
+  onResponseClosed(() => {
+    // When the chat/response window is destroyed, drop any chat threads
+    // that never accumulated a turn. Pairs with the listChats sweep so
+    // dashboard reflects reality even before the user reopens it.
+    purgeEmptyChatThreads();
+    showMainWindow();
+  });
 
   registerHotkeys(DEFAULT_BINDINGS, {
     onCapture: async () => {
@@ -647,8 +662,9 @@ app.whenReady().then(async () => {
     onDashboard: () => {
       // Close the chat (hide response window) and surface the dashboard.
       // hideResponseWindow only .hide()s — does not fire onResponseClosed,
-      // so showMainWindow must be called explicitly here.
+      // so showMainWindow + the empty-thread sweep must run explicitly.
       hideResponseWindow();
+      purgeEmptyChatThreads();
       showMainWindow();
     },
     onHistory: () => openHistory(),
