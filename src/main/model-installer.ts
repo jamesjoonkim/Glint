@@ -5,8 +5,6 @@ import type { ModelSpec, ProgressEvent } from '../shared/models.js';
 
 const log = createLogger('model-installer');
 
-export type { ProgressEvent };
-
 /**
  * Splits a stream of stdout chunks into newline-delimited JSON objects.
  * Malformed lines are logged at debug and dropped — we never want a stray
@@ -95,9 +93,11 @@ export class ModelInstaller {
       this.current = child;
 
       let sawComplete = false;
+      let sawError = false;
       const parser = new JsonlParser((ev) => {
         if (ev.event === 'complete') sawComplete = true;
         if (ev.event === 'error') {
+          sawError = true;
           this.callbacks.onModelError(spec, ev.msg);
         }
         this.callbacks.onProgress(spec, ev);
@@ -121,7 +121,9 @@ export class ModelInstaller {
         }
         if (sawComplete && code === 0) {
           this.callbacks.onModelDone(spec);
-        } else {
+        } else if (!sawError) {
+          // Structured error already forwarded by the parser callback above —
+          // don't double-fire with a generic exit-code message.
           this.callbacks.onModelError(
             spec,
             `downloader exited with code ${code ?? 'null'}`,
@@ -132,7 +134,9 @@ export class ModelInstaller {
 
       child.on('error', (err) => {
         log.error({ err: String(err), repo: spec.repo }, 'spawn failed');
-        this.callbacks.onModelError(spec, String(err));
+        if (!this.cancelled) {
+          this.callbacks.onModelError(spec, String(err));
+        }
         resolve();
       });
     });
