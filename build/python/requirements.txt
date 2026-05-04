@@ -6,6 +6,7 @@ mlx-metal==0.31.2
 mlx-lm==0.31.3
 mlx-vlm==0.4.4
 huggingface-hub==1.12.0
+tqdm==4.67.3
 sentencepiece==0.2.0
 # Qwen3-VL's AutoProcessor hard-imports torch via VideoProcessor even
 # though we only do single-image inference. Bundle the arm64 CPU build.

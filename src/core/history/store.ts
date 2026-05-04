@@ -224,6 +224,31 @@ export type ChatThreadSummary = {
   lastTurnAt: number | null;
 };
 
+/**
+ * Delete chat-only threads (no attached capture) that have zero turns.
+ * Same anti-join predicate as listChatThreads so we never touch a
+ * capture-anchored thread, and the turn-count guard makes this safe to
+ * call eagerly — a thread with even one user/assistant turn is kept.
+ *
+ * `protectId` lets a caller exclude an in-flight thread (e.g., the chat
+ * the user just opened but hasn't typed in yet). Returns rows affected.
+ */
+export function purgeEmptyChatThreads(protectId?: string): number {
+  const result = getDb()
+    .prepare(
+      `DELETE FROM threads
+       WHERE id IN (
+         SELECT t.id FROM threads t
+         LEFT JOIN captures c ON c.thread_id = t.id
+         WHERE c.id IS NULL
+           AND (SELECT COUNT(*) FROM turns WHERE thread_id = t.id) = 0
+           AND (? IS NULL OR t.id != ?)
+       )`,
+    )
+    .run(protectId ?? null, protectId ?? null);
+  return result.changes;
+}
+
 export function listChatThreads(limit: number = 100): ChatThreadSummary[] {
   return getDb()
     .prepare<unknown[], ChatThreadSummary>(

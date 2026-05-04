@@ -3,6 +3,7 @@ import { ResponseWindow } from './components/ResponseWindow/index.js';
 import { HistoryPanel } from './components/HistoryPanel/index.js';
 import { FirstRun } from './windows/FirstRun/index.js';
 import { Settings } from './windows/Settings/index.js';
+import { Tutor } from './windows/Tutor/index.js';
 
 function getView(): string {
   const params = new URLSearchParams(window.location.search);
@@ -17,6 +18,7 @@ export function App(): JSX.Element {
   if (view === 'history') return <HistoryPanel />;
   if (view === 'settings') return <Settings />;
   if (view === 'first-run') return <FirstRun />;
+  if (view === 'tutor') return <Tutor />;
 
   // Main window = dashboard. HistoryPanel renders the gallery of past
   // captures + lets you reopen any thread in the response window.

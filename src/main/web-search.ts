@@ -148,15 +148,21 @@ export async function fetchImageBytes(
 /** System-prompt fragment that teaches the model the tool format. */
 export const WEB_SEARCH_TOOL_PROMPT = `You have access to one tool: \`web_search\`.
 
-When you need information from the live web — current events, prices, recent papers, breaking news, OR pictures/images of something the user asked to see — call the tool by outputting EXACTLY this format on its own:
+CALL THE TOOL whenever ANY of these are true:
+- The user asks about a specific named thing (project, product, company, person, paper, library, game, event) you don't have confident, recent knowledge about.
+- The user uses words like "search", "look up", "find", "google", "recent", "latest", "current", "today", "this week", or "news".
+- The user asks for a picture/photo/image of something — pass the subject as the query.
+- The user corrects a name or term you didn't recognize (e.g. "no, it's called X") — that's a strong signal you should look it up.
+- You would otherwise answer "I don't know" or "I couldn't find information" — search instead of guessing.
+
+Format: output EXACTLY this on its own line, with NO other prose before or after:
 
 <tool_call>
 {"name": "web_search", "arguments": {"query": "<short focused query>"}}
 </tool_call>
 
 Rules:
-- Output the tool_call ALONE — no prose before or after.
-- Use the tool only when truly needed; for general knowledge questions answer from your training data.
-- For "show me a picture/photo/image of X" requests, ALWAYS call web_search with X as the query — the tool returns image results that the user will see.
-- Keep queries short (under 10 words).
-- After the tool returns results in a \`<tool_response>\` block (and any attached images), answer the user's question using them. Cite source titles inline like (TechCrunch). When images came back, briefly describe what they show.`;
+- Default to searching when uncertain. A wasted search is much better than a hallucinated or "I don't know" answer.
+- Keep queries short (under 10 words) and specific.
+- After the tool returns results in a \`<tool_response>\` block (and any attached images), answer the user's question using them. Cite source titles inline like (TechCrunch). When images came back, briefly describe what they show.
+- For pure general knowledge the model has confidently learned (basic science, common definitions, common code patterns), skip the tool and answer directly.`;

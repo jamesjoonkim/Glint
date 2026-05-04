@@ -48,11 +48,18 @@ export function ChatReply({
     ta.style.height = `${ta.scrollHeight}px`;
   }, [value]);
 
-  // Focus the input when the response window mounts so ⌘⇧Z chats land
-  // ready-to-type without an extra click.
+  // Focus the input on mount AND whenever the thread changes — ⌘⇧Z mints a
+  // fresh threadId each press, and the response window is reused (not
+  // remounted), so a one-shot mount effect would only fire on the first
+  // open. Re-running on threadId change covers every subsequent ⌘⇧Z.
   useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
+    if (!threadId) return;
+    // rAF lets BrowserWindow.show() finish raising the window before we
+    // grab focus — without it, macOS sometimes drops the focus on the
+    // floor during the show-then-focus race.
+    const raf = requestAnimationFrame(() => textareaRef.current?.focus());
+    return () => cancelAnimationFrame(raf);
+  }, [threadId]);
 
   const stageFile = async (file: File): Promise<void> => {
     if (!file.type.startsWith('image/')) return;

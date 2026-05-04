@@ -7,6 +7,7 @@ const log = createLogger('window:overlay');
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 
 let overlay: BrowserWindow | null = null;
+let hiddenForOverlay: BrowserWindow[] = [];
 
 /**
  * Open the marquee overlay covering the active display. Idempotent — calling
@@ -16,6 +17,20 @@ export function openOverlay(): BrowserWindow {
   if (overlay && !overlay.isDestroyed()) {
     overlay.focus();
     return overlay;
+  }
+
+  // Hide every other visible Glint window so none appear in the screenshot.
+  // Tracked so capture:cancel can restore exactly what we hid.
+  hiddenForOverlay = [];
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed() && w.isVisible()) {
+      hiddenForOverlay.push(w);
+      try {
+        w.hide();
+      } catch {
+        // window mid-teardown — skip
+      }
+    }
   }
 
   const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
@@ -82,4 +97,23 @@ export function closeOverlay(): void {
   }
   overlay.destroy();
   overlay = null;
+}
+
+/**
+ * Re-show the windows we hid in openOverlay. Used on cancel — the
+ * capture:request path leaves them hidden because the streaming flow
+ * (response window opens, main shows on response close) handles
+ * visibility on its own schedule.
+ */
+export function restoreOverlayHiddenWindows(): void {
+  for (const w of hiddenForOverlay) {
+    if (!w.isDestroyed()) {
+      try {
+        w.show();
+      } catch {
+        // ignore — window destroyed between hide and restore
+      }
+    }
+  }
+  hiddenForOverlay = [];
 }

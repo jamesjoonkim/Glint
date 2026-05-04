@@ -25,9 +25,11 @@ process.on('unhandledRejection', (e) => {
   createLogger('main').error({ err: String(e) }, 'unhandled rejection');
 });
 import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.js';
-import { closeOverlay, openOverlay } from './windows/overlay.js';
+import { closeOverlay, openOverlay, restoreOverlayHiddenWindows } from './windows/overlay.js';
 import { openHistory } from './windows/history.js';
 import { hideResponseWindow, onResponseClosed, openResponse } from './windows/response.js';
+import { openTutor } from './windows/tutor.js';
+import { registerTutorIpc } from './tutor/ipc.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
@@ -41,11 +43,14 @@ import {
   getTurns,
   listChatThreads,
   listRecent,
+  purgeEmptyChatThreads,
   searchChatThreads,
   openStore,
   searchKeyword,
+  setThumbnail,
   type CaptureRow,
 } from '../core/history/store.js';
+import { makeThumbnail } from '../core/history/thumbnails.js';
 import { setMigrationsDir } from '../core/history/migrations.js';
 import { loadSettings, setSettingsPath } from './settings.js';
 import type { CaptureBBox } from '../shared/types.js';
@@ -115,6 +120,7 @@ function showMainWindow(): void {
 
 function wireIpc(): void {
   ipcMain.handle('ping', () => 'pong' as const);
+  registerTutorIpc();
 
   ipcMain.handle('model:stream:cancel', (_e, payload: unknown) => {
     const streamId = (payload as { streamId?: unknown })?.streamId;
@@ -125,6 +131,7 @@ function wireIpc(): void {
 
   ipcMain.handle('capture:cancel', () => {
     closeOverlay();
+    restoreOverlayHiddenWindows();
     pendingCaptureThreadId = null;
     return { ok: true } as const;
   });
@@ -136,9 +143,10 @@ function wireIpc(): void {
     if (!granted) return { ok: false, error: 'screen recording denied' };
     // Stash the target thread; capture:request consumes it on the next call.
     pendingCaptureThreadId = threadId;
-    // Hide the response window so the chat isn't in the captured frame.
-    // openResponse() will re-show it once startStream fires after capture.
-    hideResponseWindow();
+    // openOverlay() hides every visible Glint window (incl. the response
+    // chat) so none appear in the captured frame, and tracks them for
+    // restore on cancel. openResponse() re-shows the chat when the stream
+    // fires after a successful capture.
     openOverlay();
     return { ok: true };
   });
@@ -192,7 +200,7 @@ function wireIpc(): void {
       // are explicit user-attached images, the composed turn always goes
       // through the vision route when possible.
       try {
-        createCaptureWithThread({
+        const { capture } = createCaptureWithThread({
           pngPath: decoded.pngPath,
           ocrText: '',
           ocrConfidence: 0,
@@ -200,6 +208,12 @@ function wireIpc(): void {
           route: 'vision',
           threadId,
         });
+        // Generate thumbnail async — pasted/dropped attachments otherwise
+        // render with the empty placeholder in the captures grid until the
+        // startup backfill catches them on next launch.
+        void makeThumbnail(decoded.pngPath)
+          .then((thumb) => setThumbnail(capture.id, thumb))
+          .catch((err) => log.warn({ err: String(err) }, 'attachment thumb failed'));
       } catch (err) {
         log.warn({ err: String(err) }, 'composed attachment row insert failed');
       }
@@ -254,6 +268,7 @@ function wireIpc(): void {
     } catch (err) {
       log.error({ err: String(err) }, 'capture failed');
       closeOverlay(); // even on failure — never leave the marquee on screen
+      restoreOverlayHiddenWindows(); // bring back the UI we hid for the shot
       return { ok: false, error: String(err) };
     }
   });
@@ -264,11 +279,19 @@ function wireIpc(): void {
     mapHistory(searchKeyword(typeof query === 'string' ? query : '')),
   );
 
-  ipcMain.handle('history:listChats', () => listChatThreads(200));
+  ipcMain.handle('history:listChats', () => {
+    // Reap empty chat threads (no capture, 0 turns) before listing so the
+    // dashboard never shows "untitled chat · 0 turns" placeholders the user
+    // never typed in. Safe: an empty thread has no UI path back to it once
+    // hidden, so nothing references the rows we delete.
+    purgeEmptyChatThreads();
+    return listChatThreads(200);
+  });
 
-  ipcMain.handle('history:searchChats', (_e, query: unknown) =>
-    searchChatThreads(typeof query === 'string' ? query : '', 200),
-  );
+  ipcMain.handle('history:searchChats', (_e, query: unknown) => {
+    purgeEmptyChatThreads();
+    return searchChatThreads(typeof query === 'string' ? query : '', 200);
+  });
 
   ipcMain.handle('history:openThread', (_e, payload: unknown) => {
     const threadId = (payload as { threadId?: unknown })?.threadId;
@@ -610,7 +633,11 @@ app.whenReady().then(async () => {
   void visionRuntimePromise.then((h) => (visionRuntime = h));
   wireIpc();
   createMainWindow();
-  onResponseClosed(() => showMainWindow());
+  onResponseClosed(() => {
+    // Drop chat threads that never accumulated a turn. Dashboard surfaces
+    // only on launch + Cmd+Shift+D — closing a chat must not raise it.
+    purgeEmptyChatThreads();
+  });
 
   registerHotkeys(DEFAULT_BINDINGS, {
     onCapture: async () => {
@@ -633,8 +660,17 @@ app.whenReady().then(async () => {
         fire();
       }
     },
+    onDashboard: () => {
+      // Close the chat (hide response window) and surface the dashboard.
+      // hideResponseWindow only .hide()s — does not fire onResponseClosed,
+      // so showMainWindow + the empty-thread sweep must run explicitly.
+      hideResponseWindow();
+      purgeEmptyChatThreads();
+      showMainWindow();
+    },
     onHistory: () => openHistory(),
     onSettings: () => log.info('settings hotkey (P5)'),
+    onTutor: () => openTutor(),
   });
 
   app.on('activate', () => {

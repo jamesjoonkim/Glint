@@ -1,6 +1,6 @@
 {
   "name": "glint",
-  "version": "2.0.0-alpha.0",
+  "version": "2.0.0-alpha.1",
   "description": "Local-first AI screenshot assistant for Apple Silicon Macs.",
   "main": ".vite/build/index.js",
   "license": "MIT",
@@ -10,7 +10,7 @@
     "npm": ">=10"
   },
   "scripts": {
-    "predev": "pkill -9 -f 'out/Glint-darwin-arm64' 2>/dev/null; pkill -9 -f 'Glint.app/Contents/Resources/runtime/glint-mlx-server' 2>/dev/null; true",
+    "predev": "pkill -9 -f 'out/Glint-darwin-arm64' 2>/dev/null; pkill -9 -f '/Applications/Glint.app/Contents/MacOS/Glint' 2>/dev/null; pkill -9 -f 'Glint.app/Contents/Resources/runtime/glint-mlx-server' 2>/dev/null; true",
     "dev": "npm run rebuild:electron && electron-forge start",
     "package": "npm run rebuild:electron && electron-forge package",
     "make": "npm run rebuild:electron && electron-forge make",
@@ -28,7 +28,7 @@
   "glint": {
     "models": {
       "text": "mlx-community/Qwen2.5-7B-Instruct-4bit",
-      "vision": "mlx-community/Qwen2-VL-7B-Instruct-4bit",
+      "vision": "mlx-community/Qwen3-VL-8B-Instruct-4bit",
       "embed": "mlx-community/bge-small-en-v1.5-bf16"
     }
   },

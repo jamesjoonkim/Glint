@@ -15,6 +15,13 @@ const PUSH_CHANNELS = new Set<string>([
   'response:set-stream',
   'response:set-thread',
   'response:replay',
+  'firstRun:progress',
+  'firstRun:done',
+  'firstRun:error',
+  'tutor:event',
+  'tutor:explain:chunk',
+  'tutor:explain:done',
+  'tutor:deep-link',
 ]);
 
 const api = Object.freeze({

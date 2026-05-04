@@ -23,6 +23,11 @@ def _enforce_localhost(args):
 def main() -> None:
     args = sys.argv[1:]
 
+    # Subcommand: download. Routes to downloader.py, bypasses server logic.
+    if args and args[0] == "download":
+        import downloader
+        sys.exit(downloader.main(args[1:]))
+
     backend = "text"
     cleaned = []
     skip = False

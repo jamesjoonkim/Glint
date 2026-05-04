@@ -53,7 +53,7 @@ function ModelsTab(): JSX.Element {
     <section>
       <h3>Local models</h3>
       <p className={styles.body}>
-        Manage the local Qwen2.5, Qwen2-VL, and BGE-small models. Re-download,
+        Manage the local Qwen2.5, Qwen3-VL, and BGE-small models. Re-download,
         remove, or switch to a smaller variant if you're running on 8 GB.
       </p>
       <p className={styles.note}>Wire-up lands in v2.0 RC.</p>

@@ -45,6 +45,28 @@ export const IPC = {
     get: 'settings:get',
     set: 'settings:set',
   },
+  // first-run wizard
+  firstRun: {
+    getStatus: 'firstRun:getStatus',
+    start: 'firstRun:start',
+    cancel: 'firstRun:cancel',
+    retry: 'firstRun:retry',
+    complete: 'firstRun:complete',
+  },
+  // tutor mode (CC session observer)
+  tutor: {
+    open: 'tutor:open',
+    listSessions: 'tutor:list-sessions',
+    watchSession: 'tutor:watch-session',
+    stopWatching: 'tutor:stop-watching',
+    listCalib: 'tutor:list-calib',
+    labelBlock: 'tutor:label-block',
+    getPrompt: 'tutor:get-prompt',
+    setPrompt: 'tutor:set-prompt',
+    resetPrompt: 'tutor:reset-prompt',
+    explainPastTurn: 'tutor:explain-past-turn',
+    explainBulk: 'tutor:explain-bulk',
+  },
 } as const;
 
 export type IpcChannelName =

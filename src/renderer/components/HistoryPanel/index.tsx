@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useHistory, type HistoryItem } from '../../hooks/useHistory.js';
 import { useChatThreads, type ChatThreadItem } from '../../hooks/useChatThreads.js';
+import { useLensSessions, type LensSession } from '../../hooks/useLensSessions.js';
 import styles from './styles.module.css';
 
-type Tab = 'captures' | 'chats';
+type Tab = 'captures' | 'chats' | 'lens';
 
 function formatDate(ts: number): { day: string; time: string } {
   const d = new Date(ts);
@@ -99,15 +100,65 @@ function ChatCard({ item }: { item: ChatThreadItem }): JSX.Element {
   );
 }
 
+function relativeTime(ms: number): string {
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+function basename(p: string): string {
+  return p.split('/').filter(Boolean).pop() ?? p;
+}
+
+function LensRow({ s, onPick }: { s: LensSession; onPick: () => void }): JSX.Element {
+  // Defensive: tolerate stale main bundle that doesn't yet emit
+  // primary/secondary. Falls back to basename(cwd).
+  const primary = s.primary || basename(s.cwd) || '?';
+  const secondary = s.secondary;
+  return (
+    <button
+      type="button"
+      className={styles.lensRow}
+      onClick={onPick}
+      aria-label={`Open Lens for ${primary}`}
+    >
+      <span
+        className={`${styles.lensDot} ${s.active ? styles.lensDotActive : styles.lensDotStale}`}
+        aria-hidden
+      />
+      <div className={styles.lensRowMain}>
+        <div className={styles.lensRowName}>
+          <span className={styles.lensRowPrimary}>{primary}</span>
+          {secondary && (
+            <span className={styles.lensRowSecondary}>· {secondary}</span>
+          )}
+        </div>
+        <div className={styles.lensRowMeta}>
+          {relativeTime(s.mtimeMs)} · {s.sessionUuid.slice(0, 8)}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 export function HistoryPanel(): JSX.Element {
   const [tab, setTab] = useState<Tab>('captures');
   const captures = useHistory();
   const chats = useChatThreads();
+  const lens = useLensSessions();
   const [q, setQ] = useState('');
 
   const showingCaptures = tab === 'captures';
-  const loading = showingCaptures ? captures.loading : chats.loading;
-  const error = showingCaptures ? captures.error : chats.error;
+  const showingChats = tab === 'chats';
+  const showingLens = tab === 'lens';
+  const loading = showingCaptures
+    ? captures.loading
+    : showingChats
+      ? chats.loading
+      : lens.loading;
+  const error = showingCaptures ? captures.error : showingChats ? chats.error : null;
 
   return (
     <div className={styles.root}>
@@ -154,11 +205,19 @@ export function HistoryPanel(): JSX.Element {
         </button>
         <button
           type="button"
-          className={`${styles.tab} ${!showingCaptures ? styles.tabActive : ''}`}
+          className={`${styles.tab} ${showingChats ? styles.tabActive : ''}`}
           onClick={() => setTab('chats')}
         >
           Chats
           <span className={styles.tabCount}>{chats.items.length}</span>
+        </button>
+        <button
+          type="button"
+          className={`${styles.tab} ${showingLens ? styles.tabActive : ''}`}
+          onClick={() => setTab('lens')}
+        >
+          Lens
+          <span className={styles.tabCount}>{lens.activeCount}</span>
         </button>
       </nav>
 
@@ -166,7 +225,7 @@ export function HistoryPanel(): JSX.Element {
         {error && <div className={styles.error}>error · {error}</div>}
         {loading && !error && <div className={styles.loading}>loading the archive…</div>}
 
-        {showingCaptures ? (
+        {showingCaptures && (
           <>
             {!loading && captures.items.length === 0 && !error && (
               <div className={styles.empty}>
@@ -184,7 +243,9 @@ export function HistoryPanel(): JSX.Element {
               ))}
             </div>
           </>
-        ) : (
+        )}
+
+        {showingChats && (
           <>
             {!loading && chats.items.length === 0 && !error && (
               <div className={styles.empty}>
@@ -198,6 +259,33 @@ export function HistoryPanel(): JSX.Element {
             <div className={styles.chatList}>
               {chats.items.map((item) => (
                 <ChatCard key={item.id} item={item} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {showingLens && (
+          <>
+            {!loading && lens.items.length === 0 && (
+              <div className={styles.empty}>
+                <h2 className={styles.emptyTitle}>No Claude Code sessions found.</h2>
+                <p className={styles.emptyBody}>
+                  Run <code>claude</code> in any project. Sessions appear here
+                  the moment Claude Code writes to its transcript.
+                </p>
+              </div>
+            )}
+            <div className={styles.lensList}>
+              {lens.items.map((s) => (
+                <LensRow
+                  key={s.jsonlPath}
+                  s={s}
+                  onPick={() => {
+                    void window.glint?.invoke?.('tutor:open', {
+                      jsonlPath: s.jsonlPath,
+                    });
+                  }}
+                />
               ))}
             </div>
           </>
