@@ -8,7 +8,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { streamCompletion, type ClientConfig } from '../../core/models/client.js';
 import { createLogger } from '../../core/logger/index.js';
-import { EXPLAIN_SYSTEM_DRAFT } from './prompts.js';
+import { getActivePrompt } from './prompt_override.js';
 import type { TurnSummary } from './parseTurn.js';
 
 const log = createLogger('tutor:explain');
@@ -102,9 +102,14 @@ export async function formatTurnForPrompt(
   if (s.tools.length > 0) {
     const lines = s.tools.map((t) => {
       const inp = trim(JSON.stringify(t.input), 300);
-      return `- ${t.name}(${inp})`;
+      const head = `- ${t.name}(${inp})`;
+      if (typeof t.result === 'string' && t.result.length > 0) {
+        const tag = t.resultError ? 'ERROR' : 'RESULT';
+        return `${head}\n  ${tag}: ${trim(t.result, 800).replace(/\n/g, '\n  ')}`;
+      }
+      return head;
     });
-    parts.push(`TOOL CALLS:\n${lines.join('\n')}`);
+    parts.push(`TOOL CALLS + RESULTS:\n${lines.join('\n')}`);
   }
 
   if (s.diffs.length > 0) {
@@ -143,7 +148,10 @@ export async function* explainTurn(
   }
 
   const cfg: ClientConfig = { baseUrl: TEXT_BASE };
-  const userMsg = await formatTurnForPrompt(summary, cwd);
+  const [userMsg, systemPrompt] = await Promise.all([
+    formatTurnForPrompt(summary, cwd),
+    getActivePrompt(),
+  ]);
 
   try {
     const stream = streamCompletion(
@@ -151,7 +159,7 @@ export async function* explainTurn(
       {
         model,
         messages: [
-          { role: 'system', content: EXPLAIN_SYSTEM_DRAFT },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userMsg },
         ],
         max_tokens: 300,

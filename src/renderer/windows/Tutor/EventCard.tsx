@@ -64,6 +64,40 @@ function isSkip(s: string): boolean {
   return s.trim().toUpperCase() === 'SKIP';
 }
 
+function ExplainPane({ text, done }: { text: string; done: boolean }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  const canCopy = done && text.trim().length > 0;
+  const onCopy = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // clipboard denied — silent
+    }
+  };
+  return (
+    <div className={styles.cardExplain}>
+      {text ? (
+        <pre className={styles.cardExplainText}>{text}</pre>
+      ) : (
+        <span className={styles.cardExplainPending}>thinking…</span>
+      )}
+      {!done && text && <span className={styles.cardExplainCursor}>▋</span>}
+      {canCopy && (
+        <button
+          type="button"
+          className={styles.copyBtn}
+          onClick={onCopy}
+          aria-label="copy explanation"
+        >
+          {copied ? '✓' : '⎘'}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ToolRow({ t, i }: { t: ToolUse; i: number }): JSX.Element {
   const [open, setOpen] = useState(false);
   const hasResult = typeof t.result === 'string' && t.result.length > 0;
@@ -124,16 +158,10 @@ export function EventCard({ turn }: { turn: CardTurn }): JSX.Element | null {
       ))}
 
       {!turn.historical && (
-        <div className={styles.cardExplain}>
-          {turn.explanation ? (
-            <pre className={styles.cardExplainText}>{turn.explanation}</pre>
-          ) : (
-            <span className={styles.cardExplainPending}>thinking…</span>
-          )}
-          {!turn.explanationDone && turn.explanation && (
-            <span className={styles.cardExplainCursor}>▋</span>
-          )}
-        </div>
+        <ExplainPane
+          text={turn.explanation}
+          done={turn.explanationDone}
+        />
       )}
     </article>
   );

@@ -6,6 +6,8 @@ import { openTutor, getTutorWindow, onTutorClosed } from '../windows/tutor.js';
 import { tailSession, type TailHandle, type TurnKind } from './tail.js';
 import { explainTurn } from './explain.js';
 import { appendCalibBlock } from './calib.js';
+import { listCalibFiles, setBlockLabel, type Label } from './calib_read.js';
+import { getPromptOverride, setPromptOverride, clearPromptOverride } from './prompt_override.js';
 import type { TurnSummary } from './parseTurn.js';
 
 const log = createLogger('tutor:ipc');
@@ -147,6 +149,41 @@ export function registerTutorIpc(): void {
   ipcMain.handle(IPC.tutor.stopWatching, () => {
     stopActive();
     return { ok: true };
+  });
+
+  ipcMain.handle(IPC.tutor.listCalib, async () => {
+    return await listCalibFiles();
+  });
+
+  ipcMain.handle(IPC.tutor.labelBlock, async (_e, payload?: {
+    filePath?: unknown;
+    blockId?: unknown;
+    label?: unknown;
+  }) => {
+    const filePath = typeof payload?.filePath === 'string' ? payload.filePath : null;
+    const blockId = typeof payload?.blockId === 'string' ? payload.blockId : null;
+    const label = (
+      payload?.label === 'TEACHABLE' ||
+      payload?.label === 'SKIP' ||
+      payload?.label === 'BORDERLINE' ||
+      payload?.label === null
+    ) ? (payload.label as Label) : null;
+    if (!filePath || !blockId) return { ok: false, error: 'missing args' };
+    return await setBlockLabel(filePath, blockId, label);
+  });
+
+  ipcMain.handle(IPC.tutor.getPrompt, async () => {
+    return await getPromptOverride();
+  });
+
+  ipcMain.handle(IPC.tutor.setPrompt, async (_e, payload?: { text?: unknown }) => {
+    const text = typeof payload?.text === 'string' ? payload.text : null;
+    if (text === null) return { ok: false, error: 'missing text' };
+    return await setPromptOverride(text);
+  });
+
+  ipcMain.handle(IPC.tutor.resetPrompt, async () => {
+    return await clearPromptOverride();
   });
 
   // Stop the active watch the moment the Lens window closes — no polling.

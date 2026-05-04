@@ -59,6 +59,11 @@ export const IPC = {
     listSessions: 'tutor:list-sessions',
     watchSession: 'tutor:watch-session',
     stopWatching: 'tutor:stop-watching',
+    listCalib: 'tutor:list-calib',
+    labelBlock: 'tutor:label-block',
+    getPrompt: 'tutor:get-prompt',
+    setPrompt: 'tutor:set-prompt',
+    resetPrompt: 'tutor:reset-prompt',
   },
 } as const;
 

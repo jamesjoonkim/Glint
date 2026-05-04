@@ -11,8 +11,11 @@ Your job: explain WHY this turn happened, in glyph format.
 You receive (when available):
   PROJECT CONTEXT (CLAUDE.md): project's self-description.
   REASONING: Claude's natural-language thinking.
-  TOOL CALLS: which tools fired, args.
+  TOOL CALLS + RESULTS: tools fired, args, and their actual output.
   DIFFS: file path + old + new + current full file content.
+
+Tool results matter. If grep returned 5 hits, the choice of which file
+to edit IS the principle. Don't ignore the RESULT lines.
 
 # OUTPUT FORMAT — glyph
 

@@ -5,6 +5,9 @@ on:
     tags:
       - 'v2.*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: macos-14
@@ -20,12 +23,11 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run make
-        env:
-          APPLE_DEV_ID_APPLICATION: ${{ secrets.APPLE_DEV_ID_APPLICATION }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      - uses: actions/upload-artifact@v4
+      - name: Publish DMG to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: glint-mac-arm64
-          path: out/make/**/*.dmg
+          files: out/make/**/*.dmg
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-rc') }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true

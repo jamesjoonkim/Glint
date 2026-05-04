@@ -44,7 +44,18 @@ function getInitialJsonlPath(): string | null {
   return params.get('jsonl');
 }
 
+function useEscapeToClose(): void {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') window.close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+}
+
 export function Tutor(): JSX.Element {
+  useEscapeToClose();
   const [picked, setPicked] = useState<Session | null>(null);
   const [turns, setTurns] = useState<CardTurn[]>([]);
   const turnsRef = useRef<Map<number, CardTurn>>(new Map());

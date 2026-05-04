@@ -158,7 +158,7 @@ export async function tailSession(
   // they already happened, and queueing them up would jam the MLX server
   // before any live turn could get explained.
   try {
-    let handle = await fs.open(jsonlPath, 'r');
+    const handle = await fs.open(jsonlPath, 'r');
     const stat = await handle.stat();
     const start = Math.max(0, stat.size - HISTORY_READ_BYTES);
     const len = stat.size - start;
