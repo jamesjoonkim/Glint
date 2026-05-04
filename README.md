@@ -25,15 +25,77 @@ Plus the original Glint workflow: press `⌘⇧X`, drag a region, get a streamin
 
 ## Lens — watch your Claude Code sessions
 
-Press `⌘⇧L` and pick a Claude Code session. Lens tails the JSONL transcript Anthropic writes for every CC conversation, parses each turn (user message, tool call, file edit, assistant response), and pipes it through a local model that explains what's happening — turn by turn, in plain English.
+> **A live commentary track for your AI pair-programmer.**
 
-Why it's useful:
+Press `⌘⇧L`, pick any Claude Code session on your machine, and Lens does three things at once:
 
-- **Learn from your own sessions.** New to a codebase, a framework, or just curious *why* CC reached for a particular tool? Lens narrates the reasoning live.
-- **Onboard others without screen-sharing.** A junior dev can replay a senior's CC session with explanations layered on top.
-- **Catch the moment things drift.** Lens flags when a turn looks "messy" — overconfident edits, half-finished refactors, missing test coverage.
+1. **Tails** the JSONL transcript Claude Code writes to `~/.claude/projects/<repo>/<uuid>.jsonl` — the same file CC itself appends to during the session.
+2. **Parses** each turn into a structured event: user prompt, tool call (Bash, Read, Edit, Write, Grep, …), file diff, assistant message.
+3. **Explains** what just happened in plain English — *why* CC reached for that tool, *what* the diff does, *whether* the next step makes sense — by piping the turn into the local Qwen 2.5 text model.
 
-Lens runs against the same on-device Qwen models as the rest of Glint. Your transcripts never leave your Mac.
+Pick from any past session in the picker, or attach to one that's still running and watch the explanations stream in as CC works.
+
+### Flow
+
+```
+                ┌──────────────────────────┐
+   ⌘⇧L   ───►   │   Session picker         │  scans ~/.claude/projects
+                │   (sorted by recency)    │  shows last N sessions
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   JSONL tail watcher     │  fs.watch on transcript
+                │   (historical replay     │  emits new lines as appended
+                │    + live append)        │  bounded backfill on attach
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   parseTurn.ts           │  user / assistant / tool_use
+                │   classifies each line   │  / tool_result / file_edit
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   EXPLAIN_SYSTEM prompt  │  loads CLAUDE.md + edited
+                │   + turn payload         │  files for codebase context
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   Qwen 2.5 7B (local)    │  SSE stream → renderer
+                │   on mlx_lm.server       │  one explanation per turn
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   TurnFeed UI            │  EventCard per turn
+                │   (DiffView for edits)   │  scrolls with new arrivals
+                └──────────────────────────┘
+```
+
+### Two modes
+
+| Mode | When to use it | What you see |
+|------|----------------|--------------|
+| **Historical replay** | Reading back a session that's already finished | Bounded backfill — last N turns load instantly, no live tail |
+| **Live tail** | CC is running right now in another terminal | New turns stream in as CC appends them; explanations arrive a few seconds behind |
+
+### What an explanation looks like
+
+A typical turn — say CC just ran a `Bash` tool call to `git diff --stat HEAD~1` — produces an EventCard like this:
+
+> **CC ran:** `git diff --stat HEAD~1`
+>
+> **Lens says:** *Checking what changed in the last commit before answering. The user asked about a regression and CC is anchoring its analysis to a specific revision instead of guessing from the working tree. Good move — `--stat` keeps the output small enough to fit in context.*
+
+For a `Edit` tool call, the EventCard renders the unified diff inline (DiffView) and the explanation comments on the change itself: *what* was modified, *why* the new code is preferable, and any subtle behavior shifts.
+
+### Calibration loop
+
+Lens isn't a black box. Every explanation is appended to a calibration log (`calib.ts`) along with the source turn, so you can review them later and label each one **good** / **bad** / **borderline**. The labelled corpus drives prompt tuning: open the **Prompt** pane (`prompt_override.ts`) and edit the `EXPLAIN_SYSTEM` prompt live — no rebuild — to dial the explanation style toward concise / verbose / pedagogical / blunt.
+
+This is the same calibration pattern used internally to ship Lens v0.1: 30+ labelled turns from real CC sessions across three repos (TypeScript / Python / Electron) shaped the default prompt.
+
+### Privacy
+
+Lens reads transcripts that already exist on your machine — Claude Code wrote them locally. The explainer model runs in the same `mlx_lm.server` subprocess as the rest of Glint, bound to `127.0.0.1`. No transcript text, no diff content, no file path ever leaves your Mac.
 
 ## What else it does
 
