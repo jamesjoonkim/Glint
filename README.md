@@ -4,29 +4,106 @@
 
 <br />
 
-**Local-first AI screenshot assistant for Apple Silicon.**
+**Local-first AI for Apple Silicon — screenshots, chat, and now Lens.**
 
-Press `⌘⇧X`. Drag a region. Get an answer.
-All inference runs on your Mac — no cloud, no telemetry, no tracking.
+🔍 **NEW: Lens (`⌘⇧L`)** — watch your Claude Code sessions live. Lens reads each turn off the JSONL transcript and explains what just happened, on-device, in real time.
 
+Plus the original Glint workflow: press `⌘⇧X`, drag a region, get a streaming AI answer. All inference runs on your Mac — no cloud, no telemetry, no tracking.
+
+[![Download](https://img.shields.io/badge/download-DMG-c9a96e?style=flat-square)](https://github.com/jamesjoonkim/Glint/releases/latest)
 [![Status](https://img.shields.io/badge/status-v2_alpha-c9a96e?style=flat-square)](https://github.com/jamesjoonkim/Glint/tree/feature/v2-rebuild)
 [![Platform](https://img.shields.io/badge/platform-Apple_Silicon-1a2236?style=flat-square)](https://www.apple.com/mac/)
 [![License](https://img.shields.io/badge/license-MIT-1a2236?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-49_passing-7bd389?style=flat-square)](#development)
 [![TypeScript](https://img.shields.io/badge/typescript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-[Install](#install) · [How it works](#how-it-works) · [Privacy](#privacy) · [Development](#development) · [Roadmap](#roadmap)
+[Install](#install) · [Lens](#lens-watch-your-claude-code-sessions) · [How it works](#how-it-works) · [Privacy](#privacy) · [Development](#development) · [Roadmap](#roadmap)
 
 </div>
 
 ---
 
-## What it does
+## Lens — watch your Claude Code sessions
+
+> **A live commentary track for your AI pair-programmer.**
+
+Press `⌘⇧L`, pick any Claude Code session on your machine, and Lens does three things at once:
+
+1. **Tails** the JSONL transcript Claude Code writes to `~/.claude/projects/<repo>/<uuid>.jsonl` — the same file CC itself appends to during the session.
+2. **Parses** each turn into a structured event: user prompt, tool call (Bash, Read, Edit, Write, Grep, …), file diff, assistant message.
+3. **Explains** what just happened in plain English — *why* CC reached for that tool, *what* the diff does, *whether* the next step makes sense — by piping the turn into the local Qwen 2.5 text model.
+
+Pick from any past session in the picker, or attach to one that's still running and watch the explanations stream in as CC works.
+
+### Flow
+
+```
+                ┌──────────────────────────┐
+   ⌘⇧L   ───►   │   Session picker         │  scans ~/.claude/projects
+                │   (sorted by recency)    │  shows last N sessions
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   JSONL tail watcher     │  fs.watch on transcript
+                │   (historical replay     │  emits new lines as appended
+                │    + live append)        │  bounded backfill on attach
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   parseTurn.ts           │  user / assistant / tool_use
+                │   classifies each line   │  / tool_result / file_edit
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   EXPLAIN_SYSTEM prompt  │  loads CLAUDE.md + edited
+                │   + turn payload         │  files for codebase context
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   Qwen 2.5 7B (local)    │  SSE stream → renderer
+                │   on mlx_lm.server       │  one explanation per turn
+                └────────────┬─────────────┘
+                             │
+                ┌────────────▼─────────────┐
+                │   TurnFeed UI            │  EventCard per turn
+                │   (DiffView for edits)   │  scrolls with new arrivals
+                └──────────────────────────┘
+```
+
+### Two modes
+
+| Mode | When to use it | What you see |
+|------|----------------|--------------|
+| **Historical replay** | Reading back a session that's already finished | Bounded backfill — last N turns load instantly, no live tail |
+| **Live tail** | CC is running right now in another terminal | New turns stream in as CC appends them; explanations arrive a few seconds behind |
+
+### What an explanation looks like
+
+A typical turn — say CC just ran a `Bash` tool call to `git diff --stat HEAD~1` — produces an EventCard like this:
+
+> **CC ran:** `git diff --stat HEAD~1`
+>
+> **Lens says:** *Checking what changed in the last commit before answering. The user asked about a regression and CC is anchoring its analysis to a specific revision instead of guessing from the working tree. Good move — `--stat` keeps the output small enough to fit in context.*
+
+For a `Edit` tool call, the EventCard renders the unified diff inline (DiffView) and the explanation comments on the change itself: *what* was modified, *why* the new code is preferable, and any subtle behavior shifts.
+
+### Calibration loop
+
+Lens isn't a black box. Every explanation is appended to a calibration log (`calib.ts`) along with the source turn, so you can review them later and label each one **good** / **bad** / **borderline**. The labelled corpus drives prompt tuning: open the **Prompt** pane (`prompt_override.ts`) and edit the `EXPLAIN_SYSTEM` prompt live — no rebuild — to dial the explanation style toward concise / verbose / pedagogical / blunt.
+
+This is the same calibration pattern used internally to ship Lens v0.1: 30+ labelled turns from real CC sessions across three repos (TypeScript / Python / Electron) shaped the default prompt.
+
+### Privacy
+
+Lens reads transcripts that already exist on your machine — Claude Code wrote them locally. The explainer model runs in the same `mlx_lm.server` subprocess as the rest of Glint, bound to `127.0.0.1`. No transcript text, no diff content, no file path ever leaves your Mac.
+
+## What else it does
 
 Capture any region of any monitor with a global hotkey. Glint OCRs the image, routes it to either a text or vision LLM running locally, and streams the answer into a floating response window. Every capture is saved to a searchable, taggable, replayable archive — also entirely local.
 
 | Hotkey | Action |
 |--------|--------|
+| `⌘⇧L` | **Lens** — watch & explain a live Claude Code session |
 | `⌘⇧X` | Drag-select any region → AI answer streams into a floating window |
 | `⌘⇧Z` | Open a direct chat with the local model — no screenshot |
 | `⌘⇧H` | Open the searchable history archive |
@@ -95,7 +172,23 @@ When the model invokes a search, the response window shows a `searching the web 
 
 ## Install
 
-> v2 is pre-alpha. Signed DMGs ship after the first-run wizard lands. v1 (cloud GPT-4V) DMGs remain on the [Releases page](https://github.com/jamesjoonkim/Glint/releases).
+### Download the DMG
+
+Grab the latest build from the [**Releases page**](https://github.com/jamesjoonkim/Glint/releases/latest). Drag `Glint.app` into `/Applications`.
+
+> **First launch — important.** v2 alpha DMGs are **unsigned**. macOS will refuse to open the app on the first try with either:
+> - *"Glint is damaged and can't be opened"* (macOS 15+), or
+> - *"Glint can't be opened because Apple cannot check it for malicious software"* (macOS 13–14).
+>
+> The file is not actually damaged. To clear Gatekeeper's quarantine flag, run this once in Terminal:
+>
+> ```bash
+> xattr -cr /Applications/Glint.app
+> ```
+>
+> Then open Glint normally. Signed + notarized builds are on the roadmap.
+
+### Build from source
 
 ```bash
 git clone https://github.com/jamesjoonkim/Glint.git
@@ -196,11 +289,12 @@ tests/e2e/           # Playwright on a packaged build
 - [x] Multi-image composed turns — bundle N images + text into one assistant response
 - [x] Stop-button mid-stream + partial-answer persistence
 - [x] Opt-in web search via Tavily with autonomous tool-call loop
+- [x] **Lens** — live Claude Code session observer with on-device explanations (`⌘⇧L`)
 - [ ] First-run wizard for model download
 - [ ] Semantic search over OCR text and assistant turns (sqlite-vss)
 - [ ] Settings UI for web search, model selection, hotkey rebinding, log retention
 - [ ] Image fetch from web search (download top results into composed-turn context)
-- [ ] Signed DMG + optional auto-update (off by default)
+- [ ] Signed + notarized DMG (Apple Developer Program) + optional auto-update (off by default)
 
 v1 (cloud GPT-4V) is preserved at the [`v1-final` tag](https://github.com/jamesjoonkim/Glint/tree/v1-final) for reference.
 
