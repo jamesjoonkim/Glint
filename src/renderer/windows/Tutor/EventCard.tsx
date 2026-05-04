@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { DiffView } from './DiffView.js';
 import styles from './styles.module.css';
 
 interface ToolUse {
   name: string;
   input: Record<string, unknown>;
+  id?: string;
+  result?: string | null;
+  resultError?: boolean;
 }
 
 interface DiffBlock {
@@ -60,8 +64,36 @@ function isSkip(s: string): boolean {
   return s.trim().toUpperCase() === 'SKIP';
 }
 
+function ToolRow({ t, i }: { t: ToolUse; i: number }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const hasResult = typeof t.result === 'string' && t.result.length > 0;
+
+  return (
+    <div className={styles.toolRow}>
+      <button
+        type="button"
+        className={`${styles.cardTool} ${hasResult ? styles.cardToolClickable : ''} ${
+          t.resultError ? styles.cardToolError : ''
+        }`}
+        onClick={() => hasResult && setOpen((v) => !v)}
+        disabled={!hasResult}
+        aria-label={hasResult ? `toggle result for ${t.name}` : t.name}
+      >
+        <span className={styles.cardToolName}>{t.name}</span>
+        <span className={styles.cardToolInput}>{briefInput(t)}</span>
+        {hasResult && (
+          <span className={styles.cardToolChevron}>{open ? '▾' : '▸'}</span>
+        )}
+        {t.resultError && <span className={styles.cardToolErrIcon}>!</span>}
+      </button>
+      {open && hasResult && (
+        <pre className={styles.cardToolResult}>{t.result}</pre>
+      )}
+    </div>
+  );
+}
+
 export function EventCard({ turn }: { turn: CardTurn }): JSX.Element | null {
-  // Hide cards Qwen explicitly skipped — keeps the feed signal-dense.
   if (turn.explanationDone && isSkip(turn.explanation) && !turn.historical) {
     return null;
   }
@@ -82,10 +114,7 @@ export function EventCard({ turn }: { turn: CardTurn }): JSX.Element | null {
       {turn.tools.length > 0 && (
         <div className={styles.cardTools}>
           {turn.tools.map((t, i) => (
-            <span key={i} className={styles.cardTool}>
-              <span className={styles.cardToolName}>{t.name}</span>
-              <span className={styles.cardToolInput}>{briefInput(t)}</span>
-            </span>
+            <ToolRow key={t.id ?? i} t={t} i={i} />
           ))}
         </div>
       )}
