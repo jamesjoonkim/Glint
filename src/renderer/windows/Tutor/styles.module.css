@@ -254,24 +254,8 @@
 
 .cardTools {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 6px;
-}
-
-.cardTool {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  font-family: var(--mono);
-  font-size: 11px;
-  padding: 3px 8px;
-  background: var(--ink-3);
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cardToolName {
@@ -425,4 +409,67 @@
 
 .feedJump:hover {
   background: var(--brass-soft);
+}
+
+.toolRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.cardTool {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--paper);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  cursor: default;
+  text-align: left;
+}
+
+.cardToolClickable {
+  cursor: pointer;
+  transition: border-color var(--t-fast) var(--ease-paper);
+}
+
+.cardToolClickable:hover {
+  border-color: var(--brass);
+}
+
+.cardToolError {
+  border-color: var(--signal-err);
+}
+
+.cardToolChevron {
+  color: var(--paper-3);
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+.cardToolErrIcon {
+  color: var(--signal-err);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.cardToolResult {
+  margin: 0;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--paper-2);
+  background: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
