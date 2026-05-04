@@ -18,6 +18,10 @@ const PUSH_CHANNELS = new Set<string>([
   'firstRun:progress',
   'firstRun:done',
   'firstRun:error',
+  'tutor:event',
+  'tutor:explain:chunk',
+  'tutor:explain:done',
+  'tutor:deep-link',
 ]);
 
 const api = Object.freeze({

@@ -1,0 +1,423 @@
+/* Tutor window — uses editorial-dark tokens from theme.css. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--sans);
+}
+
+.header {
+  -webkit-app-region: drag;
+  padding: 28px 24px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--paper-3);
+  margin: 0;
+}
+
+.heading {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  margin: 6px 0 0;
+  color: var(--paper);
+}
+
+.subhead {
+  font-size: 13px;
+  color: var(--paper-3);
+  margin: 6px 0 0;
+}
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px 24px;
+}
+
+.empty {
+  color: var(--paper-3);
+  font-size: 13px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.row {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  background: var(--ink-2);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-paper),
+              border-color var(--t-fast) var(--ease-paper);
+}
+
+.row:hover {
+  background: var(--ink-3);
+  border-color: var(--rule-strong);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dotActive {
+  background: var(--signal-ok);
+  box-shadow: 0 0 6px var(--signal-ok);
+}
+
+.dotStale {
+  background: var(--paper-4);
+  opacity: 0.5;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowName {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.rowPrimary {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--paper);
+}
+
+.rowSecondary {
+  font-size: 12px;
+  color: var(--paper-3);
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowMeta {
+  font-size: 11px;
+  color: var(--paper-3);
+  margin-top: 3px;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono);
+}
+
+.refreshBtn {
+  -webkit-app-region: no-drag;
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 6px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  background: transparent;
+  color: var(--paper-3);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease-paper),
+              border-color var(--t-fast) var(--ease-paper);
+}
+
+.refreshBtn:hover {
+  color: var(--paper);
+  border-color: var(--rule-strong);
+}
+
+.feed {
+  -webkit-app-region: no-drag;
+  font-size: 13px;
+  color: var(--paper-3);
+}
+
+.backBtn {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  color: var(--paper-3);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 16px;
+}
+
+.backBtn:hover {
+  color: var(--paper);
+}
+
+.placeholder {
+  font-family: var(--serif);
+  font-size: 16px;
+  color: var(--paper-3);
+  text-align: center;
+  padding: 64px 0;
+  font-style: italic;
+}
+
+/* ─ Turn feed ────────────────────────────────────────────── */
+
+.feed {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 32px;
+}
+
+.feedEmpty {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--paper-3);
+  text-align: center;
+  padding: 64px 24px;
+  line-height: 1.6;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--ink-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-3);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cardIdx {
+  font-weight: 600;
+  color: var(--brass);
+}
+
+.cardTime {
+  font-variant-numeric: tabular-nums;
+}
+
+.cardUser {
+  display: flex;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--paper-2);
+}
+
+.cardUserLabel {
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--paper-3);
+  letter-spacing: 0.08em;
+  padding-top: 3px;
+  flex-shrink: 0;
+}
+
+.cardUserText {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.cardTools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cardTool {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  background: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardToolName {
+  color: var(--brass);
+  font-weight: 600;
+}
+
+.cardToolInput {
+  color: var(--paper-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diffBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.diffFile {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-3);
+  padding-left: 4px;
+}
+
+.diffPre {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  background: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  padding: 8px 0;
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.diffOld,
+.diffNew {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px;
+  white-space: pre;
+}
+
+.diffOld {
+  background: rgba(198, 107, 90, 0.10);
+  color: #d8a097;
+}
+
+.diffNew {
+  background: rgba(141, 185, 138, 0.10);
+  color: #a9c9a4;
+}
+
+.diffMark {
+  width: 12px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.diffText {
+  flex: 1;
+}
+
+.cardExplain {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(201, 169, 110, 0.05);
+  border-left: 2px solid var(--brass);
+  border-radius: 0 var(--r-1) var(--r-1) 0;
+}
+
+.cardExplainText {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--paper);
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+  tab-size: 2;
+}
+
+.cardExplainPending {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--paper-3);
+  font-size: 13px;
+}
+
+.cardExplainCursor {
+  color: var(--brass);
+  animation: blink 1s steps(2, end) infinite;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+@keyframes blink {
+  to { opacity: 0; }
+}
+
+.cardHistorical {
+  opacity: 0.55;
+  background: var(--ink);
+}
+
+.cardHistorical:hover {
+  opacity: 0.85;
+}
+
+.cardHistMark {
+  font-weight: 400;
+  color: var(--paper-3);
+  letter-spacing: 0;
+  text-transform: none;
+  font-style: italic;
+}
+
+.feedScroll {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.feedJump {
+  position: sticky;
+  bottom: 12px;
+  margin-left: auto;
+  margin-right: 12px;
+  display: block;
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--paper);
+  background: var(--ink-3);
+  border: 1px solid var(--brass);
+  border-radius: var(--r-2);
+  cursor: pointer;
+  box-shadow: var(--shadow-card);
+  transition: background var(--t-fast) var(--ease-paper);
+}
+
+.feedJump:hover {
+  background: var(--brass-soft);
+}

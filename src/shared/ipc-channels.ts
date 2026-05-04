@@ -53,6 +53,13 @@ export const IPC = {
     retry: 'firstRun:retry',
     complete: 'firstRun:complete',
   },
+  // tutor mode (CC session observer)
+  tutor: {
+    open: 'tutor:open',
+    listSessions: 'tutor:list-sessions',
+    watchSession: 'tutor:watch-session',
+    stopWatching: 'tutor:stop-watching',
+  },
 } as const;
 
 export type IpcChannelName =

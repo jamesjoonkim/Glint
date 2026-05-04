@@ -9,6 +9,7 @@ export const DEFAULT_BINDINGS = {
   dashboard: 'CommandOrControl+Shift+D',
   history: 'CommandOrControl+Shift+H',
   settings: 'CommandOrControl+,',
+  tutor:   'CommandOrControl+Shift+L',
 } as const;
 
 export type HotkeyBindings = typeof DEFAULT_BINDINGS;
@@ -19,6 +20,7 @@ export type HotkeyHandlers = {
   onDashboard: () => void;
   onHistory: () => void;
   onSettings: () => void;
+  onTutor: () => void;
 };
 
 let registered: string[] = [];
@@ -39,6 +41,7 @@ export function registerHotkeys(
     [bindings.dashboard, handlers.onDashboard],
     [bindings.history, handlers.onHistory],
     [bindings.settings, handlers.onSettings],
+    [bindings.tutor, handlers.onTutor],
   ];
 
   for (const [accel, fn] of pairs) {

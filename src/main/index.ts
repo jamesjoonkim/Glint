@@ -28,6 +28,8 @@ import { DEFAULT_BINDINGS, registerHotkeys, unregisterHotkeys } from './hotkey.j
 import { closeOverlay, openOverlay, restoreOverlayHiddenWindows } from './windows/overlay.js';
 import { openHistory } from './windows/history.js';
 import { hideResponseWindow, onResponseClosed, openResponse } from './windows/response.js';
+import { openTutor } from './windows/tutor.js';
+import { registerTutorIpc } from './tutor/ipc.js';
 import { captureBBox } from './capture.js';
 import { ensureScreenRecording } from './permissions.js';
 import { setPromptsDir } from '../core/models/prompts.js';
@@ -118,6 +120,7 @@ function showMainWindow(): void {
 
 function wireIpc(): void {
   ipcMain.handle('ping', () => 'pong' as const);
+  registerTutorIpc();
 
   ipcMain.handle('model:stream:cancel', (_e, payload: unknown) => {
     const streamId = (payload as { streamId?: unknown })?.streamId;
@@ -667,6 +670,7 @@ app.whenReady().then(async () => {
     },
     onHistory: () => openHistory(),
     onSettings: () => log.info('settings hotkey (P5)'),
+    onTutor: () => openTutor(),
   });
 
   app.on('activate', () => {
