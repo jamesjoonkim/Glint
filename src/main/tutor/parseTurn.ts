@@ -22,6 +22,12 @@ export interface RawEvent {
 export interface ToolUse {
   name: string;
   input: Record<string, unknown>;
+  /** id used to pair with the matching tool_result block. */
+  id?: string;
+  /** matching tool_result content if found, truncated. null if no result. */
+  result?: string | null;
+  /** true if the tool_result reported is_error. */
+  resultError?: boolean;
 }
 
 export interface DiffBlock {
@@ -101,6 +107,27 @@ export function groupTurns(events: RawEvent[]): RawEvent[][] {
   return turns;
 }
 
+const TOOL_RESULT_MAX = 1200;
+
+function extractToolResultText(block: Record<string, unknown>): {
+  text: string;
+  isError: boolean;
+} {
+  const isError = block['is_error'] === true;
+  const content = block['content'];
+  if (typeof content === 'string') return { text: content, isError };
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    for (const c of content) {
+      if (isRecord(c) && c['type'] === 'text') {
+        parts.push(getString(c['text']));
+      }
+    }
+    return { text: parts.join('\n'), isError };
+  }
+  return { text: '', isError };
+}
+
 export function summarizeTurn(turn: RawEvent[], turnIdx: number): TurnSummary {
   let userPrompt = '';
   const reasoningChunks: string[] = [];
@@ -108,6 +135,23 @@ export function summarizeTurn(turn: RawEvent[], turnIdx: number): TurnSummary {
   const diffs: DiffBlock[] = [];
   let timestamp = '';
   let isSidechain = false;
+
+  // First pass: collect tool_use blocks AND build an id→result map from
+  // the tool_result events that appear later in the turn.
+  const resultsById = new Map<string, { text: string; isError: boolean }>();
+  for (const ev of turn) {
+    if (ev.type === 'user' && isToolResultUser(ev) && isRecord(ev.message)) {
+      const content = ev.message['content'];
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (isRecord(block) && block['type'] === 'tool_result') {
+            const id = getString(block['tool_use_id']);
+            if (id) resultsById.set(id, extractToolResultText(block));
+          }
+        }
+      }
+    }
+  }
 
   for (const ev of turn) {
     if (ev.timestamp && !timestamp) timestamp = ev.timestamp;
@@ -127,8 +171,21 @@ export function summarizeTurn(turn: RawEvent[], turnIdx: number): TurnSummary {
             reasoningChunks.push(getString(block['text']));
           } else if (bt === 'tool_use') {
             const name = getString(block['name']) || '?';
+            const id = getString(block['id']) || undefined;
             const input = isRecord(block['input']) ? block['input'] : {};
-            tools.push({ name, input });
+            const matched = id ? resultsById.get(id) : undefined;
+            const tool: ToolUse = { name, input, id };
+            if (matched) {
+              const trimmed =
+                matched.text.length > TOOL_RESULT_MAX
+                  ? matched.text.slice(0, TOOL_RESULT_MAX) + '\n…(truncated)'
+                  : matched.text;
+              tool.result = trimmed;
+              tool.resultError = matched.isError;
+            } else {
+              tool.result = null;
+            }
+            tools.push(tool);
             if (name === 'Edit') {
               diffs.push({
                 file: getString(input['file_path']),
