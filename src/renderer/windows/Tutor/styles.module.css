@@ -550,3 +550,339 @@
   border-color: var(--brass);
   box-shadow: 0 0 0 1px var(--brass-soft);
 }
+
+.modeNav {
+  -webkit-app-region: no-drag;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.bulkInlineGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-2);
+}
+
+.modeBtn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  color: var(--paper-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease-paper),
+              border-color var(--t-fast) var(--ease-paper);
+}
+
+.modeBtn:hover {
+  color: var(--paper);
+  border-color: var(--rule-strong);
+}
+
+.modeBtnActive {
+  color: var(--brass);
+  border-color: var(--brass);
+}
+
+.calibRoot,
+.promptRoot {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.calibHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-3);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.calibCounter {
+  color: var(--brass);
+  font-weight: 600;
+}
+
+.calibHint {
+  font-style: italic;
+  font-family: var(--serif);
+}
+
+.calibFile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.calibDate {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 8px 0 0;
+}
+
+.calibBlock {
+  background: var(--ink-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-2);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.calibBlockHeader {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--brass);
+  font-weight: 600;
+}
+
+.calibBody {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--paper-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--ink);
+  border-radius: var(--r-1);
+}
+
+.calibLabelRow {
+  display: flex;
+  gap: 6px;
+}
+
+.calibLabelBtn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  color: var(--paper-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-paper);
+}
+
+.calibLabelBtn:hover {
+  color: var(--paper);
+  border-color: var(--rule-strong);
+}
+
+.calibLabelBtnActive {
+  color: var(--ink);
+  background: var(--brass);
+  border-color: var(--brass);
+}
+
+.promptMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--paper-3);
+  letter-spacing: 0.06em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.promptDirty {
+  color: var(--signal-warn);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.promptArea {
+  flex: 1;
+  min-height: 320px;
+  background: var(--ink-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 12px;
+  outline: none;
+  resize: vertical;
+}
+
+.promptArea:focus {
+  border-color: var(--brass);
+}
+
+.promptActions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.promptBtn,
+.promptBtnPrimary {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 6px 12px;
+  border-radius: var(--r-1);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-paper);
+}
+
+.promptBtn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--paper-3);
+}
+
+.promptBtn:hover {
+  color: var(--paper);
+  border-color: var(--rule-strong);
+}
+
+.promptBtnPrimary {
+  background: var(--brass);
+  border: 1px solid var(--brass);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.promptBtnPrimary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.messRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.messChip {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--rule);
+  cursor: help;
+  white-space: nowrap;
+}
+
+.messChipInfo {
+  color: var(--paper-3);
+}
+
+.messChipWarn {
+  color: var(--signal-warn);
+  border-color: rgba(212, 166, 87, 0.3);
+}
+
+.messChipErr {
+  color: var(--signal-err);
+  border-color: rgba(198, 107, 90, 0.4);
+}
+
+.explainBtn {
+  align-self: flex-start;
+  background: transparent;
+  border: 1px dashed var(--rule);
+  border-radius: var(--r-1);
+  color: var(--paper-3);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-paper);
+}
+
+.explainBtn:hover {
+  border-style: solid;
+  border-color: var(--brass);
+  color: var(--brass);
+}
+
+.bulkBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  margin: 0 0 12px;
+  background: rgba(201, 169, 110, 0.06);
+  border: 1px solid rgba(201, 169, 110, 0.18);
+  border-radius: var(--r-1);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.bulkLabel {
+  color: var(--paper-3);
+}
+
+.bulkInline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--paper-2);
+}
+
+.bulkInput {
+  width: 50px;
+  padding: 2px 6px;
+  background: var(--ink-2);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-1);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 11px;
+  outline: none;
+  text-align: center;
+}
+
+.bulkInput:focus {
+  border-color: var(--brass);
+}
+
+.bulkBtn {
+  background: var(--brass);
+  color: var(--ink);
+  border: 1px solid var(--brass);
+  border-radius: var(--r-1);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+
+.bulkBtn:hover {
+  filter: brightness(1.1);
+}

@@ -66,24 +66,66 @@ async function readFileExcerpt(filePath: string): Promise<string | null> {
 
 async function resolveModel(): Promise<string> {
   if (cachedModel) return cachedModel;
-  const res = await fetch(`${TEXT_BASE}/v1/models`, {
-    signal: AbortSignal.timeout(2_000),
-  });
-  if (!res.ok) throw new Error(`models lookup ${res.status}`);
-  const data = (await res.json()) as { data?: Array<{ id?: string }> };
-  const id = data.data?.[0]?.id;
-  if (!id) throw new Error('no model id in /v1/models');
-  cachedModel = id;
-  return id;
+  // Retry once after a beat — handles the brief window where MLX server
+  // is up (port bound) but model still loading after a dev restart.
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(`${TEXT_BASE}/v1/models`, {
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!res.ok) throw new Error(`models lookup ${res.status}`);
+      const data = (await res.json()) as { data?: Array<{ id?: string }> };
+      const id = data.data?.[0]?.id;
+      if (!id) throw new Error('no model id in /v1/models');
+      cachedModel = id;
+      return id;
+    } catch (err) {
+      lastErr = err;
+      if (attempt === 0) await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 function trim(s: string, max: number): string {
   return s.length > max ? s.slice(0, max) + '…' : s;
 }
 
+/**
+ * One-line compact summary of a past turn. Used to fit many turns into
+ * the SESSION CONTEXT block without burning the context budget.
+ *
+ * Format: "T<idx>: <user-prompt-trim> → <tool1, tool2, …>"
+ * Roughly 40-80 tokens per turn. 30 turns ≈ 1500-2400 tokens.
+ */
+function formatPastTurnOneLine(s: TurnSummary): string {
+  const prompt = s.userPrompt ? trim(s.userPrompt.replace(/\s+/g, ' '), 120) : '';
+  const tools = s.tools
+    .slice(0, 6)
+    .map((t) => {
+      const inp = t.input;
+      const sval = (k: string): string =>
+        typeof inp[k] === 'string' ? (inp[k] as string) : '';
+      if (t.name === 'Edit' || t.name === 'Write' || t.name === 'Read') {
+        return `${t.name}(${sval('file_path').split('/').pop() ?? '?'})`;
+      }
+      if (t.name === 'Bash') return `Bash(${trim(sval('command'), 30)})`;
+      if (t.name === 'Grep') return `Grep('${trim(sval('pattern'), 20)}')`;
+      return t.name;
+    })
+    .join(', ');
+  const more = s.tools.length > 6 ? ` +${s.tools.length - 6}` : '';
+  const left = `T${s.turnIdx}`;
+  const middle = prompt ? `: ${prompt}` : '';
+  const right = tools ? ` → ${tools}${more}` : '';
+  return `${left}${middle}${right}`;
+}
+
 export async function formatTurnForPrompt(
   s: TurnSummary,
   cwd: string | null,
+  precedingTurns: TurnSummary[] = [],
 ): Promise<string> {
   const parts: string[] = [];
 
@@ -94,6 +136,25 @@ export async function formatTurnForPrompt(
     if (md) {
       parts.push(`PROJECT CONTEXT (CLAUDE.md):\n${md}`);
     }
+  }
+
+  // Session trajectory — every preceding turn condensed to one line.
+  // Lets Qwen see the whole arc, not one isolated move. ~40-80 tokens
+  // per turn; if we trip a budget cap we trim oldest first.
+  if (precedingTurns.length > 0) {
+    const lines = precedingTurns.map(formatPastTurnOneLine);
+    // Soft cap: 4000 chars (~1000 tokens). Drop oldest until we fit.
+    let joined = lines.join('\n');
+    let dropped = 0;
+    while (joined.length > 4000 && lines.length > 5) {
+      lines.shift();
+      dropped += 1;
+      joined = lines.join('\n');
+    }
+    const header = dropped > 0
+      ? `SESSION CONTEXT (last ${lines.length} turns; ${dropped} older trimmed):`
+      : `SESSION CONTEXT (last ${lines.length} turns):`;
+    parts.push(`${header}\n${joined}`);
   }
 
   if (s.userPrompt) parts.push(`USER ASKED:\n${trim(s.userPrompt, 500)}`);
@@ -136,6 +197,7 @@ export async function formatTurnForPrompt(
 export async function* explainTurn(
   summary: TurnSummary,
   cwd: string | null,
+  precedingTurns: TurnSummary[] = [],
   signal?: AbortSignal,
 ): AsyncIterable<string> {
   let model: string;
@@ -149,7 +211,7 @@ export async function* explainTurn(
 
   const cfg: ClientConfig = { baseUrl: TEXT_BASE };
   const [userMsg, systemPrompt] = await Promise.all([
-    formatTurnForPrompt(summary, cwd),
+    formatTurnForPrompt(summary, cwd, precedingTurns),
     getActivePrompt(),
   ]);
 

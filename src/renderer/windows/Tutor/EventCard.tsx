@@ -16,16 +16,30 @@ interface DiffBlock {
   new: string;
 }
 
+interface MessFlag {
+  rule: string;
+  label: string;
+  reason: string;
+  file: string;
+  severity: 'info' | 'warn' | 'error';
+}
+
 export interface CardTurn {
   turnIdx: number;
+  turnId: string;
   timestamp: string;
   userPrompt: string;
   reasoning: string;
   tools: ToolUse[];
   diffs: DiffBlock[];
+  mess?: MessFlag[];
   explanation: string;
   explanationDone: boolean;
   historical?: boolean;
+  /** True iff explanation was loaded from cache (renderer hint, not used for logic). */
+  fromCache?: boolean;
+  /** Explain in progress (user clicked "explain this"). */
+  explaining?: boolean;
 }
 
 function briefInput(t: ToolUse): string {
@@ -132,6 +146,17 @@ export function EventCard({ turn }: { turn: CardTurn }): JSX.Element | null {
     return null;
   }
 
+  const requestExplain = async (): Promise<void> => {
+    if (!window.glint) return;
+    await window.glint.invoke('tutor:explain-past-turn', { turnId: turn.turnId });
+  };
+
+  const hasExplanation = turn.explanation.length > 0 && !isSkip(turn.explanation);
+  const showExplainButton =
+    turn.historical && !turn.explaining && !hasExplanation;
+  const showReExplainButton =
+    turn.historical && hasExplanation && !turn.explaining;
+
   const cardClass = turn.historical
     ? `${styles.card} ${styles.cardHistorical}`
     : styles.card;
@@ -144,6 +169,26 @@ export function EventCard({ turn }: { turn: CardTurn }): JSX.Element | null {
         </span>
         <span className={styles.cardTime}>{formatTime(turn.timestamp)}</span>
       </header>
+
+      {turn.mess && turn.mess.length > 0 && (
+        <div className={styles.messRow}>
+          {turn.mess.map((m, i) => (
+            <span
+              key={`${m.rule}-${i}`}
+              className={`${styles.messChip} ${
+                m.severity === 'error'
+                  ? styles.messChipErr
+                  : m.severity === 'warn'
+                    ? styles.messChipWarn
+                    : styles.messChipInfo
+              }`}
+              title={m.reason}
+            >
+              ⚠ {m.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {turn.tools.length > 0 && (
         <div className={styles.cardTools}>
@@ -162,6 +207,29 @@ export function EventCard({ turn }: { turn: CardTurn }): JSX.Element | null {
           text={turn.explanation}
           done={turn.explanationDone}
         />
+      )}
+
+      {turn.historical && hasExplanation && (
+        <ExplainPane
+          text={turn.explanation}
+          done={!turn.explaining}
+        />
+      )}
+
+      {turn.historical && (showExplainButton || showReExplainButton) && (
+        <button
+          type="button"
+          className={styles.explainBtn}
+          onClick={() => void requestExplain()}
+        >
+          {showReExplainButton ? '⟳ re-explain' : '⊕ explain this turn'}
+        </button>
+      )}
+
+      {turn.historical && turn.explaining && !hasExplanation && (
+        <div className={styles.cardExplain}>
+          <span className={styles.cardExplainPending}>thinking…</span>
+        </div>
       )}
     </article>
   );

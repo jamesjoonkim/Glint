@@ -38,6 +38,9 @@ export interface DiffBlock {
 
 export interface TurnSummary {
   turnIdx: number;
+  /** Stable id derived from the first event's uuid in this turn.
+   *  Survives across tail-replay and full-file-load; safe cache key. */
+  turnId: string;
   timestamp: string;
   userPrompt: string;
   reasoning: string;
@@ -135,6 +138,11 @@ export function summarizeTurn(turn: RawEvent[], turnIdx: number): TurnSummary {
   const diffs: DiffBlock[] = [];
   let timestamp = '';
   let isSidechain = false;
+  // Stable id: first event's uuid. Falls back to the synthetic
+  // "idx@timestamp" if uuids are missing for whatever reason.
+  const firstUuid =
+    typeof turn[0]?.uuid === 'string' ? turn[0]?.uuid : undefined;
+  const turnId = firstUuid ?? `idx-${turnIdx}`;
 
   // First pass: collect tool_use blocks AND build an id→result map from
   // the tool_result events that appear later in the turn.
@@ -207,6 +215,7 @@ export function summarizeTurn(turn: RawEvent[], turnIdx: number): TurnSummary {
 
   return {
     turnIdx,
+    turnId,
     timestamp,
     userPrompt: userPrompt.slice(0, 1000),
     reasoning: reasoningChunks.join('\n'),

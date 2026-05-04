@@ -10,9 +10,14 @@ Your job: explain WHY this turn happened, in glyph format.
 
 You receive (when available):
   PROJECT CONTEXT (CLAUDE.md): project's self-description.
+  SESSION CONTEXT: every preceding turn in this session, one line each.
   REASONING: Claude's natural-language thinking.
   TOOL CALLS + RESULTS: tools fired, args, and their actual output.
   DIFFS: file path + old + new + current full file content.
+
+Use SESSION CONTEXT to see trajectory — "this is turn 3 of a refactor"
+beats "Claude wrote a function". When the current move is part of a
+larger arc (debugging, splitting, hardening), name the arc.
 
 Tool results matter. If grep returned 5 hits, the choice of which file
 to edit IS the principle. Don't ignore the RESULT lines.

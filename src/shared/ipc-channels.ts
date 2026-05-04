@@ -64,6 +64,8 @@ export const IPC = {
     getPrompt: 'tutor:get-prompt',
     setPrompt: 'tutor:set-prompt',
     resetPrompt: 'tutor:reset-prompt',
+    explainPastTurn: 'tutor:explain-past-turn',
+    explainBulk: 'tutor:explain-bulk',
   },
 } as const;
 

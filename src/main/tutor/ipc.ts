@@ -8,6 +8,10 @@ import { explainTurn } from './explain.js';
 import { appendCalibBlock } from './calib.js';
 import { listCalibFiles, setBlockLabel, type Label } from './calib_read.js';
 import { getPromptOverride, setPromptOverride, clearPromptOverride } from './prompt_override.js';
+import { detectMess, type MessFlag } from './mess.js';
+import { getCache, putCache } from './cache.js';
+import { loadAllCodeActionTurns, loadPrecedingTurns } from './loadTurns.js';
+import { promises as fs } from 'node:fs';
 import type { TurnSummary } from './parseTurn.js';
 
 const log = createLogger('tutor:ipc');
@@ -39,7 +43,25 @@ function pushToWindow(channel: string, payload: unknown): void {
   win.webContents.send(channel, payload);
 }
 
-function emitTurnStart(summary: TurnSummary, kind: TurnKind): void {
+async function readFileContents(s: TurnSummary): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  for (const d of s.diffs) {
+    if (!d.file || map.has(d.file)) continue;
+    try {
+      const text = await fs.readFile(d.file, 'utf8');
+      map.set(d.file, text);
+    } catch {
+      // file may not exist (deleted) — skip
+    }
+  }
+  return map;
+}
+
+function emitTurnStart(
+  summary: TurnSummary,
+  kind: TurnKind,
+  mess: MessFlag[] = [],
+): void {
   pushToWindow('tutor:event', {
     kind: 'turn-start',
     historical: kind === 'history',
@@ -48,8 +70,15 @@ function emitTurnStart(summary: TurnSummary, kind: TurnKind): void {
       timestamp: summary.timestamp,
       userPrompt: summary.userPrompt,
       reasoning: summary.reasoning,
-      tools: summary.tools.map((t) => ({ name: t.name, input: t.input })),
+      tools: summary.tools.map((t) => ({
+        name: t.name,
+        input: t.input,
+        id: t.id,
+        result: t.result,
+        resultError: t.resultError,
+      })),
       diffs: summary.diffs,
+      mess,
     },
   });
 }
@@ -58,15 +87,24 @@ async function pumpExplain(
   summary: TurnSummary,
   sessionUuid: string,
   cwd: string | null,
+  jsonlPath: string,
 ): Promise<void> {
   const ac = new AbortController();
   active?.abortControllers.add(ac);
 
-  emitTurnStart(summary, 'live');
+  // Mess detection runs first so chips render before MLX takes its time.
+  const fileContents = await readFileContents(summary);
+  const mess = detectMess(summary, fileContents);
+  emitTurnStart(summary, 'live', mess);
+
+  // Session trajectory: load up to 30 preceding turns. Loaded fresh per
+  // call so live and re-explain both see current state. Cheap (~50ms
+  // for a 5MB JSONL).
+  const preceding = await loadPrecedingTurns(jsonlPath, summary.turnId, 30);
 
   let acc = '';
   try {
-    for await (const tok of explainTurn(summary, cwd, ac.signal)) {
+    for await (const tok of explainTurn(summary, cwd, preceding, ac.signal)) {
       if (ac.signal.aborted) break;
       acc += tok;
       pushToWindow('tutor:explain:chunk', {
@@ -85,7 +123,12 @@ async function pumpExplain(
     full: acc,
   });
 
-  await appendCalibBlock(summary, acc, sessionUuid);
+  // Persist BOTH: human-labelable markdown calibration log + machine
+  // cache for replay. Calib skips SKIP responses. Cache also skips SKIP.
+  await Promise.all([
+    appendCalibBlock(summary, acc, sessionUuid),
+    putCache(sessionUuid, summary.turnId, acc),
+  ]);
 }
 
 function stopActive(): void {
@@ -116,21 +159,22 @@ export function registerTutorIpc(): void {
     stopActive();
 
     const sessionUuid = uuidFromJsonl(jsonlPath);
+    const cache = await getCache(sessionUuid);
     const handle = await tailSession(jsonlPath, (summary, kind) => {
       if (kind === 'history') {
-        // Render the card for context — but skip explain. Mark as done
-        // immediately so the renderer doesn't show a thinking spinner.
-        emitTurnStart(summary, 'history');
+        const cached = cache.get(summary.turnId) ?? '';
+        emitTurnStart(summary, 'history', []);
         pushToWindow('tutor:explain:done', {
           turnIdx: summary.turnIdx,
-          full: '',
+          turnId: summary.turnId,
+          full: cached,
           historical: true,
+          fromCache: cached.length > 0,
         });
         return;
       }
-      // Live turn: chain onto the queue so MLX gets one request at a time.
       if (!active) return;
-      active.queue = active.queue.then(() => pumpExplain(summary, sessionUuid, cwd));
+      active.queue = active.queue.then(() => pumpExplain(summary, sessionUuid, cwd, jsonlPath));
     });
 
     active = {
@@ -184,6 +228,54 @@ export function registerTutorIpc(): void {
 
   ipcMain.handle(IPC.tutor.resetPrompt, async () => {
     return await clearPromptOverride();
+  });
+
+  ipcMain.handle(IPC.tutor.explainPastTurn, async (_e, payload?: {
+    turnId?: unknown;
+  }) => {
+    if (!active) return { ok: false, error: 'no active session' };
+    const turnId = typeof payload?.turnId === 'string' ? payload.turnId : null;
+    if (!turnId) return { ok: false, error: 'missing turnId' };
+
+    const all = await loadAllCodeActionTurns(active.jsonlPath);
+    const summary = all.find((t) => t.turnId === turnId);
+    if (!summary) return { ok: false, error: 'turn not found' };
+
+    const cwd = active.cwd;
+    const sessionUuid = active.sessionUuid;
+    const jsonlPath = active.jsonlPath;
+    if (!active) return { ok: false, error: 'session went away' };
+    active.queue = active.queue.then(() => pumpExplain(summary, sessionUuid, cwd, jsonlPath));
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC.tutor.explainBulk, async (_e, payload?: {
+    count?: unknown;
+  }) => {
+    if (!active) return { ok: false, error: 'no active session' };
+    const count = typeof payload?.count === 'number' && payload.count > 0
+      ? Math.min(50, Math.floor(payload.count))
+      : 10;
+
+    const all = await loadAllCodeActionTurns(active.jsonlPath);
+    const cache = await getCache(active.sessionUuid);
+    // Take last N unexplained
+    const unexplained = all
+      .filter((t) => !cache.has(t.turnId))
+      .slice(-count);
+
+    if (unexplained.length === 0) {
+      return { ok: true, queued: 0 };
+    }
+
+    const cwd = active.cwd;
+    const sessionUuid = active.sessionUuid;
+    const jsonlPath = active.jsonlPath;
+    const a = active;
+    for (const summary of unexplained) {
+      a.queue = a.queue.then(() => pumpExplain(summary, sessionUuid, cwd, jsonlPath));
+    }
+    return { ok: true, queued: unexplained.length };
   });
 
   // Stop the active watch the moment the Lens window closes — no polling.
